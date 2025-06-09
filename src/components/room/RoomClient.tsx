@@ -26,6 +26,17 @@ import {
   PlusCircle,
   Globe,
   Copy,
+  Square, // Stop icon
+  Play,   // Play icon
+  Pause,  // Pause icon
+  Volume2, // Volume icon
+  VolumeX, // Mute icon
+  ListVideo, // Select Media icon (now Menu)
+  Menu, // New Menu icon
+  Settings2, // Settings icon for controls
+  Captions, // CC icon
+  Expand,   // Fullscreen icon
+  Youtube, // YouTube icon
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -47,6 +58,7 @@ import {
 } from "@/components/ui/dialog";
 import SelectMediaModal from './SelectMediaModal';
 import { useToast } from "@/hooks/use-toast";
+import { Slider } from "@/components/ui/slider";
 
 
 interface RoomClientProps {
@@ -61,11 +73,29 @@ interface Message {
   timestamp: Date;
 }
 
-const placeholderUsers = [
-  { id: '1', name: 'Alex', avatarUrl: 'https://placehold.co/80x80.png?text=A' , hint: 'person avatar'},
-  { id: '2', name: 'Sam', avatarUrl: 'https://placehold.co/80x80.png?text=S' , hint: 'person avatar'},
-  { id: '3', name: 'Casey', avatarUrl: 'https://placehold.co/80x80.png?text=C' , hint: 'person avatar'},
+interface Participant {
+  id: string;
+  name: string;
+  avatarUrl: string;
+  hint: string;
+  isHost: boolean;
+}
+
+const currentUser: Participant = {
+  id: 'currentUserHost',
+  name: 'You', // This will be used in tooltips or lists, display name under avatar is "Host"
+  avatarUrl: 'https://placehold.co/80x80.png?text=Me',
+  hint: 'person avatar host',
+  isHost: true,
+};
+
+const remoteParticipants: Participant[] = [
+  { id: '1', name: 'Alex', avatarUrl: 'https://placehold.co/80x80.png?text=A' , hint: 'person avatar', isHost: false },
+  { id: '2', name: 'Sam', avatarUrl: 'https://placehold.co/80x80.png?text=S' , hint: 'person avatar', isHost: false },
+  { id: '3', name: 'Casey', avatarUrl: 'https://placehold.co/80x80.png?text=C' , hint: 'person avatar', isHost: false },
 ];
+
+const allParticipants: Participant[] = [currentUser, ...remoteParticipants];
 
 
 export default function RoomClient({ roomId }: RoomClientProps) {
@@ -73,27 +103,64 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaFrameRef = useRef<HTMLIFrameElement>(null);
   const placeholderContentRef = useRef<HTMLDivElement>(null);
+  const mainMediaContainerRef = useRef<HTMLDivElement>(null);
   
   const [isSelectMediaModalOpen, setIsSelectMediaModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [roomLink, setRoomLink] = useState('');
   const { toast } = useToast();
+  
   const screenStreamRef = useRef<MediaStream | null>(null);
   const [currentMediaUrl, setCurrentMediaUrl] = useState<string | null>(null);
 
+  const [isScreenSharePlaying, setIsScreenSharePlaying] = useState(false);
+  const [isScreenShareMuted, setIsScreenShareMuted] = useState(false);
+  const [screenShareVolume, setScreenShareVolume] = useState(1); // 0 to 1
+  const [previousVolume, setPreviousVolume] = useState(1); // To store volume before mute
+
+  const [mediaSourceText, setMediaSourceText] = useState<string | null>(null);
+  
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [currentTimeDisplay, setCurrentTimeDisplay] = useState("00:00");
+  const [durationDisplay, setDurationDisplay] = useState("00:00");
+  const [isYouTubeVideo, setIsYouTubeVideo] = useState(false);
+  const [isSeeking, setIsSeeking] = useState(false);
+
+  const formatTime = (timeInSeconds: number): string => {
+    if (isNaN(timeInSeconds) || !isFinite(timeInSeconds)) return "00:00";
+    const totalSeconds = Math.floor(timeInSeconds);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    const paddedMinutes = String(minutes).padStart(2, '0');
+    const paddedSeconds = String(seconds).padStart(2, '0');
+
+    if (hours > 0) {
+      return `${String(hours).padStart(2, '0')}:${paddedMinutes}:${paddedSeconds}`;
+    }
+    return `${paddedMinutes}:${paddedSeconds}`;
+  };
+
   const stopMediaPlayback = useCallback(() => {
     setCurrentMediaUrl(null);
+    setIsYouTubeVideo(false);
     if (mediaFrameRef.current) {
-      mediaFrameRef.current.src = 'about:blank'; // More robust way to stop iframe content
+      mediaFrameRef.current.src = 'about:blank';
       mediaFrameRef.current.classList.add('hidden');
     }
-    if (placeholderContentRef.current && !screenStreamRef.current) {
+     if (placeholderContentRef.current && !screenStreamRef.current) {
       placeholderContentRef.current.classList.remove('hidden');
-      if (videoRef.current) videoRef.current.classList.add('hidden'); // Ensure screen share video is hidden
+       if(videoRef.current) videoRef.current.classList.add('hidden');
     }
+    setMediaSourceText(null);
+    setVideoProgress(0);
+    setCurrentTimeDisplay("00:00");
+    setDurationDisplay("00:00");
   }, []);
 
   const stopScreenShare = useCallback(() => {
@@ -105,32 +172,96 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       videoRef.current.srcObject = null;
       videoRef.current.classList.add('hidden');
     }
+    setIsScreenSharePlaying(false);
+    setMediaSourceText(null);
+    setVideoProgress(0);
+    setCurrentTimeDisplay("00:00");
+    setDurationDisplay("00:00");
 
     if (placeholderContentRef.current && !currentMediaUrl) {
       placeholderContentRef.current.classList.remove('hidden');
-      if (mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden'); // Ensure media frame is hidden
+      if (mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden');
     } else if (mediaFrameRef.current && currentMediaUrl) {
        mediaFrameRef.current.classList.remove('hidden');
-       if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden'); // Ensure placeholder is hidden
+       if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
     }
   }, [currentMediaUrl]);
+
+ useEffect(() => {
+    const video = videoRef.current;
+    if (!video || mediaSourceText !== "Your Screen") {
+      setIsScreenSharePlaying(false); // Reset if not screen sharing
+      return;
+    }
+
+    const handlePlay = () => setIsScreenSharePlaying(true);
+    const handlePause = () => setIsScreenSharePlaying(false);
+    
+    const handleLoadedMetadata = () => {
+      if (isFinite(video.duration)) {
+        setDurationDisplay(formatTime(video.duration));
+        // Mute by default if audio is present on screen share, or use isScreenShareMuted
+        // video.muted = true; // Example: mute by default
+        // setIsScreenShareMuted(true);
+        setScreenShareVolume(video.muted ? 0 : video.volume);
+        setIsScreenShareMuted(video.muted);
+
+      } else {
+        setDurationDisplay("Live"); // Or some other indicator for indeterminate duration
+      }
+      setIsScreenSharePlaying(!video.paused); // Set initial playing state
+    };
+
+    const handleTimeUpdate = () => {
+      if (!isSeeking && isFinite(video.currentTime) && isFinite(video.duration) && video.duration > 0) {
+        setVideoProgress((video.currentTime / video.duration) * 100);
+        setCurrentTimeDisplay(formatTime(video.currentTime));
+      } else if (!isFinite(video.duration)) {
+         setCurrentTimeDisplay(formatTime(video.currentTime)); // For live or indeterminate streams
+      }
+    };
+    
+    const handleVolumeChange = () => {
+      setScreenShareVolume(video.muted ? 0 : video.volume);
+      setIsScreenShareMuted(video.muted);
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('volumechange', handleVolumeChange);
+    
+    // Set initial state if video is already loaded (e.g., if stream was just attached)
+    if (video.readyState >= video.HAVE_METADATA) {
+        handleLoadedMetadata();
+        handleTimeUpdate();
+    }
+
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('volumechange', handleVolumeChange);
+    };
+  }, [mediaSourceText, isSeeking]); // Re-run if mediaSourceText changes (e.g. screen share starts/stops)
 
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setMessages(prev => [...prev, {id: Date.now().toString(), user: "System", text: `Welcome to room ${roomId}! This is a new design.`, timestamp: new Date()}]);
+      setMessages(prev => [...prev, {id: Date.now().toString(), user: "System", avatar: 'https://placehold.co/40x40.png?text=S', text: `Welcome to room ${roomId}!`, timestamp: new Date()}]);
     }, 1000);
     if (typeof window !== "undefined") {
       setRoomLink(window.location.href);
     }
     
-    // Cleanup streams on component unmount
     return () => {
       clearTimeout(timer);
       if (screenStreamRef.current) {
         stopScreenShare();
       }
-      // No explicit stopMediaPlayback here as it's usually tied to UI actions or screen share stopping
     };
   }, [roomId, stopScreenShare]);
 
@@ -139,10 +270,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     if (chatInput.trim()) {
       setMessages([...messages, {
         id: Date.now().toString(),
-        user: 'You',
+        user: currentUser.name,
         text: chatInput.trim(),
         timestamp: new Date(),
-        avatar: 'https://placehold.co/40x40.png?text=Me'
+        avatar: currentUser.avatarUrl
       }]);
       setChatInput('');
     }
@@ -152,12 +283,12 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     if (match && match[2].length === 11) {
-      return `https://www.youtube.com/embed/${match[2]}?autoplay=1`;
+      return `https://www.youtube.com/embed/${match[2]}?autoplay=1&controls=1&rel=0&showinfo=0&modestbranding=1`;
     }
     return null;
   };
 
-  const handlePlayUrl = (url: string) => {
+ const handlePlayUrl = (url: string) => {
     if (screenStreamRef.current) {
       stopScreenShare();
     }
@@ -165,22 +296,37 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     const embedUrl = getYouTubeEmbedUrl(url);
     if (embedUrl) {
       setCurrentMediaUrl(embedUrl);
+      setIsYouTubeVideo(true);
       if (mediaFrameRef.current) {
         mediaFrameRef.current.src = embedUrl;
         mediaFrameRef.current.classList.remove('hidden');
       }
-      if (placeholderContentRef.current) {
-        placeholderContentRef.current.classList.add('hidden');
-      }
-      if (videoRef.current) {
-        videoRef.current.classList.add('hidden');
-      }
+      if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
+      if (videoRef.current) videoRef.current.classList.add('hidden');
+      setMediaSourceText("youtube.com");
     } else {
-      toast({
-        variant: "destructive",
-        title: "Unsupported URL",
-        description: "Only YouTube video URLs are supported for now.",
-      });
+      // For now, only YouTube is "officially" supported with special handling.
+      // You could attempt to load other URLs directly, but X-Frame-Options might prevent it.
+      // Basic attempt:
+      setCurrentMediaUrl(url);
+      setIsYouTubeVideo(false); // Not a YouTube video
+      if (mediaFrameRef.current) {
+        mediaFrameRef.current.src = url;
+        mediaFrameRef.current.classList.remove('hidden');
+      }
+      if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
+      if (videoRef.current) videoRef.current.classList.add('hidden');
+      try {
+        const hostname = new URL(url).hostname;
+        setMediaSourceText(hostname);
+      } catch (e) {
+        setMediaSourceText("External Link");
+      }
+      // toast({
+      //   variant: "destructive",
+      //   title: "Unsupported URL",
+      //   description: "Only YouTube video URLs are fully supported for now. Other URLs might not embed correctly.",
+      // });
     }
     setIsSelectMediaModalOpen(false);
   };
@@ -196,7 +342,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: true,
+        audio: true, // Request audio as well
       });
       screenStreamRef.current = stream;
 
@@ -204,9 +350,15 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch(error => console.error("Error playing video:", error));
         videoRef.current.classList.remove('hidden');
+        // Initial mute state can be set here or by useEffect based on video.muted
+        // videoRef.current.muted = true; 
+        // setIsScreenShareMuted(true);
+        // setScreenShareVolume(0);
       }
       if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
       if (mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden');
+      setMediaSourceText("Your Screen");
+      setIsYouTubeVideo(false);
 
 
       stream.getVideoTracks()[0].onended = () => {
@@ -228,6 +380,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         placeholderContentRef.current.classList.remove('hidden');
         if(mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden');
       }
+       setMediaSourceText(null);
     }
   };
 
@@ -250,6 +403,78 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         });
     }
   };
+
+  const handleStopMedia = () => {
+    if (screenStreamRef.current) {
+      stopScreenShare();
+    } else if (currentMediaUrl) {
+      stopMediaPlayback();
+    }
+  };
+
+  const toggleScreenSharePlayPause = () => {
+    if (videoRef.current && screenStreamRef.current) {
+      if (videoRef.current.paused) {
+        videoRef.current.play().catch(e => console.error("Play error:", e));
+      } else {
+        videoRef.current.pause();
+      }
+      // State will be updated by 'play'/'pause' event listeners
+    }
+  };
+
+  const toggleScreenShareMute = () => {
+    if (videoRef.current && screenStreamRef.current) {
+      const currentlyMuted = videoRef.current.muted;
+      if (currentlyMuted) { // Unmuting
+        videoRef.current.muted = false;
+        // Restore previous volume or set to default if previous was 0
+        videoRef.current.volume = previousVolume > 0 ? previousVolume : 0.5;
+        // setScreenShareVolume(previousVolume > 0 ? previousVolume : 0.5); // Handled by volumechange event
+      } else { // Muting
+        setPreviousVolume(videoRef.current.volume); // Store current volume
+        videoRef.current.muted = true;
+        // setScreenShareVolume(0); // Handled by volumechange event
+      }
+      // setIsScreenShareMuted(!currentlyMuted); // Handled by volumechange event
+    }
+  };
+  
+  const handleVolumeChange = (newVolumeArray: number[]) => {
+    const newVolume = newVolumeArray[0];
+    if (videoRef.current && screenStreamRef.current) {
+      videoRef.current.volume = newVolume;
+      videoRef.current.muted = newVolume === 0;
+      // State updates (screenShareVolume, isScreenShareMuted) are handled by the 'volumechange' event listener
+    }
+  };
+
+
+  const handleToggleFullscreen = () => {
+    const elem = mainMediaContainerRef.current;
+    if (!elem) return;
+
+    if (!document.fullscreenElement) {
+      elem.requestFullscreen().catch(err => {
+        alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+  
+  const handleProgressChange = (value: number[]) => {
+    if (videoRef.current && screenStreamRef.current && isFinite(videoRef.current.duration)) {
+      const newTime = (value[0] / 100) * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setCurrentTimeDisplay(formatTime(newTime)); // Immediate update for responsiveness
+      setVideoProgress(value[0]);
+    }
+  };
+
+
+  const isMediaActive = !!(currentMediaUrl || screenStreamRef.current);
+  const isScreenShareActive = !!screenStreamRef.current;
 
 
   return (
@@ -311,11 +536,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon"><Users className="h-5 w-5" /></Button>
                 </TooltipTrigger>
-                <TooltipContent><p>Participants</p></TooltipContent>
+                <TooltipContent><p>Participants ({allParticipants.length})</p></TooltipContent>
               </Tooltip>
                <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon"><Maximize className="h-5 w-5" /></Button>
+                  <Button variant="ghost" size="icon" onClick={handleToggleFullscreen}><Maximize className="h-5 w-5" /></Button>
                 </TooltipTrigger>
                 <TooltipContent><p>Fullscreen</p></TooltipContent>
               </Tooltip>
@@ -328,50 +553,151 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           </header>
 
           {/* Content Area */}
-          <main className="flex-1 flex flex-col items-center justify-center p-4 relative bg-background">
+          <main className="flex-1 flex flex-col items-center justify-center p-4 relative bg-background" ref={mainMediaContainerRef}>
             <div className="w-full max-w-4xl aspect-[16/7] bg-black/50 rounded-lg shadow-2xl flex flex-col items-center justify-center border border-border overflow-hidden">
-              <video ref={videoRef} className="w-full h-full object-contain rounded-md hidden" autoPlay muted playsInline />
+              <video ref={videoRef} className="w-full h-full object-contain rounded-md hidden" playsInline />
               <iframe 
                 ref={mediaFrameRef} 
                 className="w-full h-full border-0 hidden" 
-                allow="autoplay; encrypted-media; picture-in-picture"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
                 title="Media Content"
               ></iframe>
               <div ref={placeholderContentRef} className="text-center p-8">
                 <h2 className="text-2xl font-semibold text-muted-foreground mb-4">Your virtual space is ready.</h2>
-                <Dialog open={isSelectMediaModalOpen} onOpenChange={setIsSelectMediaModalOpen}>
-                  <DialogTrigger asChild>
-                    <Button size="lg" className="bg-primary hover:bg-primary/80">
-                      <PlaySquare className="h-6 w-6 mr-2" /> Select Media
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent 
-                    className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl w-[95vw] md:w-[90vw] h-auto md:h-[90vh] p-0 border-0 bg-transparent shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
-                    onOpenAutoFocus={(e) => e.preventDefault()} // Prevent autofocus on internal elements
-                    >
-                     <DialogHeader className="sr-only">
-                        <DialogTitle>Select Media</DialogTitle>
-                        <DialogDescription>Choose content to share in the room.</DialogDescription>
-                      </DialogHeader>
-                    <SelectMediaModal onShareScreen={handleShareScreen} onPlayUrl={handlePlayUrl} />
-                  </DialogContent>
-                </Dialog>
+                 <Button size="lg" className="bg-primary hover:bg-primary/80" onClick={() => setIsSelectMediaModalOpen(true)}>
+                    <PlaySquare className="h-6 w-6 mr-2" /> Select Media
+                 </Button>
                 <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>
               </div>
             </div>
 
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4/5 md:w-1/2 lg:w-1/3 h-20 md:h-28 bg-muted/30 rounded-t-full flex justify-center items-end p-2 pb-0 space-x-2 md:space-x-4 shadow-xl backdrop-blur-sm">
-              {placeholderUsers.map(user => (
-                <Tooltip key={user.id}>
-                  <TooltipTrigger asChild>
-                    <Avatar className="h-12 w-12 md:h-16 md:w-16 border-2 border-primary ring-2 ring-primary/50 mb-2 md:mb-3 hover:scale-110 transition-transform cursor-pointer">
-                      <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint={user.hint} />
-                      <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                  </TooltipTrigger>
-                  <TooltipContent><p>{user.name}</p></TooltipContent>
-                </Tooltip>
+            {/* Media Control Bar */}
+            {isMediaActive && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl bg-black/80 p-2 rounded-lg shadow-xl backdrop-blur-sm flex flex-col gap-1.5">
+                {/* Progress Bar and Time */}
+                <div className="flex items-center gap-2 px-1">
+                  <span className="text-xs text-white w-12 text-center">{currentTimeDisplay}</span>
+                  <Slider
+                    value={[videoProgress]}
+                    max={100}
+                    step={0.1}
+                    onValueChange={handleProgressChange}
+                    onPointerDown={() => setIsSeeking(true)}
+                    onPointerUp={() => setIsSeeking(false)}
+                    className={cn(
+                      "w-full h-2 cursor-pointer",
+                      "[&>[data-radix-slider-track]]:h-1.5 [&>[data-radix-slider-track]]:bg-gray-600",
+                      "[&>[data-radix-slider-range]]:bg-yellow-400",
+                      "[&>[data-radix-slider-thumb]]:h-3.5 [&>[data-radix-slider-thumb]]:w-3.5 [&>[data-radix-slider-thumb]]:bg-yellow-400 [&>[data-radix-slider-thumb]]:border-2 [&>[data-radix-slider-thumb]]:border-white [&>[data-radix-slider-thumb]]:shadow",
+                      "[&>[data-radix-slider-thumb]:focus-visible]:ring-yellow-400/50 [&>[data-radix-slider-thumb]:focus-visible]:ring-offset-0"
+                    )}
+                    disabled={!isScreenShareActive || !isFinite(videoRef.current?.duration ?? 0)}
+                  />
+                  <span className="text-xs text-white w-12 text-center">{durationDisplay}</span>
+                </div>
+                 {/* Media Source Text */}
+                {mediaSourceText && <div className="text-center text-xs text-gray-300 -mt-0.5 mb-0.5">{mediaSourceText}</div>}
+
+                {/* Control Buttons */}
+                <div className="flex justify-between items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                         <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={() => setIsSelectMediaModalOpen(true)}>
+                           <Menu className="h-5 w-5" />
+                         </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Select Media</p></TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={handleStopMedia}>
+                          <Square className="h-5 w-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Stop Media</p></TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={toggleScreenSharePlayPause} disabled={!isScreenShareActive}>
+                          {isScreenSharePlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>{isScreenSharePlaying ? "Pause" : "Play"}</p></TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                         <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={toggleScreenShareMute} disabled={!isScreenShareActive}>
+                           {isScreenShareMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                         </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>{isScreenShareMuted ? "Unmute" : "Mute"}</p></TooltipContent>
+                    </Tooltip>
+                     <Slider
+                        value={[screenShareVolume]}
+                        max={1}
+                        step={0.01}
+                        onValueChange={handleVolumeChange}
+                        className={cn(
+                          "w-20 h-2 ml-1",
+                          "[&>[data-radix-slider-track]]:h-1 [&>[data-radix-slider-track]]:bg-gray-500",
+                          "[&>[data-radix-slider-range]]:bg-white",
+                          "[&>[data-radix-slider-thumb]]:h-3 [&>[data-radix-slider-thumb]]:w-3 [&>[data-radix-slider-thumb]]:bg-white [&>[data-radix-slider-thumb]]:border-0 [&>[data-radix-slider-thumb]]:shadow-sm",
+                          "[&>[data-radix-slider-thumb]:focus-visible]:ring-white/50 [&>[data-radix-slider-thumb]:focus-visible]:ring-offset-0"
+                        )}
+                        disabled={!isScreenShareActive || isScreenShareMuted}
+                      />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isYouTubeVideo && <Youtube className="h-5 w-5 text-red-500 hidden md:inline" />}
+                    <span className="text-xs text-white font-semibold bg-black/30 px-1.5 py-0.5 rounded hidden md:inline">HD</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="default" size="icon" className="bg-primary/70 hover:bg-primary/60 text-primary-foreground p-1.5 rounded w-9 h-9" disabled>
+                          <Captions className="h-5 w-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Captions (Coming Soon)</p></TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="default" size="icon" className="bg-primary/70 hover:bg-primary/60 text-primary-foreground p-1.5 rounded w-9 h-9" disabled>
+                          <Settings2 className="h-5 w-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Settings (Coming Soon)</p></TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={handleToggleFullscreen}>
+                          <Expand className="h-5 w-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Fullscreen</p></TooltipContent>
+                    </Tooltip>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Participant Avatars */}
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-4/5 md:max-w-3/4 lg:max-w-1/2 h-auto pb-1 pt-2 px-4 bg-muted/30 rounded-t-xl flex justify-center items-end space-x-2 md:space-x-3 shadow-xl backdrop-blur-sm">
+              {allParticipants.map(user => (
+                <div key={user.id} className="flex flex-col items-center text-center">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Avatar className={`h-12 w-12 md:h-16 md:w-16 border-2 ${user.isHost ? 'border-accent ring-4 ring-accent/50' : 'border-primary ring-2 ring-primary/50'} mb-0.5 hover:scale-110 transition-transform cursor-pointer`}>
+                        <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint={user.hint} />
+                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                    </TooltipTrigger>
+                    <TooltipContent><p>{user.isHost ? `${user.name} (Host)` : user.name}</p></TooltipContent>
+                  </Tooltip>
+                  <span className={`text-xs max-w-[60px] truncate ${user.isHost ? 'font-semibold text-accent' : 'text-muted-foreground'}`}>
+                    {user.isHost ? 'Host' : user.name}
+                  </span>
+                </div>
               ))}
             </div>
           </main>
@@ -451,27 +777,27 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             </div>
           </div>
           <div className="p-2 text-sm text-muted-foreground border-b border-border">
-            <Users className="h-4 w-4 inline mr-1" /> {placeholderUsers.length + 1} online
+            <Users className="h-4 w-4 inline mr-1" /> {allParticipants.length} online
           </div>
 
           <ScrollArea className="flex-grow p-3 pr-2">
             {messages.map((msg) => (
-              <div key={msg.id} className={`flex gap-2 mb-3 ${msg.user === 'You' ? 'justify-end' : ''}`}>
-                {msg.user !== 'You' && (
+              <div key={msg.id} className={`flex gap-2 mb-3 ${msg.user === currentUser.name ? 'justify-end' : ''}`}>
+                {msg.user !== currentUser.name && (
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={msg.avatar || `https://placehold.co/40x40.png?text=${msg.user.charAt(0)}`} alt={msg.user} data-ai-hint="user avatar" />
                     <AvatarFallback>{msg.user.charAt(0)}</AvatarFallback>
                   </Avatar>
                 )}
-                <div className={`max-w-[75%] p-2 rounded-lg shadow-sm ${msg.user === 'You' ? 'bg-primary text-primary-foreground' : 'bg-secondary'}`}>
+                <div className={`max-w-[75%] p-2 rounded-lg shadow-sm ${msg.user === currentUser.name ? 'bg-primary text-primary-foreground' : 'bg-secondary'}`}>
                   <p className="text-xs font-semibold mb-0.5">{msg.user === 'System' ? 'System Notice' : msg.user}</p>
                   <p className="text-sm">{msg.text}</p>
                   <p className="text-xs text-muted-foreground/80 mt-1 text-right">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                 </div>
-                 {msg.user === 'You' && (
+                 {msg.user === currentUser.name && (
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={msg.avatar} alt={msg.user} data-ai-hint="user avatar" />
-                    <AvatarFallback>{msg.user.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={msg.avatar} alt={msg.user} data-ai-hint="user avatar host" />
+                    <AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback>
                   </Avatar>
                 )}
               </div>
@@ -490,7 +816,26 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             </Button>
           </form>
         </aside>
+
+        {/* Select Media Modal (Dialog) */}
+         <Dialog open={isSelectMediaModalOpen} onOpenChange={setIsSelectMediaModalOpen}>
+            <DialogContent 
+              className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl w-[95vw] md:w-[90vw] h-auto md:h-[90vh] p-0 border-0 bg-transparent shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
+              onOpenAutoFocus={(e) => e.preventDefault()}
+            >
+              <DialogHeader className="sr-only">
+                <DialogTitle>Select Media</DialogTitle>
+                <DialogDescription>Choose content to share in the room.</DialogDescription>
+              </DialogHeader>
+              <SelectMediaModal 
+                onShareScreen={handleShareScreen} 
+                onPlayUrl={handlePlayUrl} 
+              />
+            </DialogContent>
+          </Dialog>
+
       </div>
     </TooltipProvider>
   );
 }
+
