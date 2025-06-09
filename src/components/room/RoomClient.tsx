@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import Link from 'next/link'; // Keep this import
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -27,7 +27,7 @@ import {
   Gem,
   PlusCircle,
   Globe,
-  X,
+  X, // X icon is still available if needed, but DialogClose component is not used directly here.
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -42,7 +42,9 @@ import {
   Dialog,
   DialogContent,
   DialogTrigger,
-  DialogClose, // Import DialogClose
+  DialogHeader, // Import DialogHeader
+  DialogTitle,   // Import DialogTitle
+  // DialogClose, // Explicit DialogClose from RoomClient is removed
 } from "@/components/ui/dialog";
 import SelectMediaModal from './SelectMediaModal';
 
@@ -85,10 +87,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (chatInput.trim()) {
-      setMessages([...messages, { 
-        id: Date.now().toString(), 
-        user: 'You', 
-        text: chatInput.trim(), 
+      setMessages([...messages, {
+        id: Date.now().toString(),
+        user: 'You',
+        text: chatInput.trim(),
         timestamp: new Date(),
         avatar: 'https://placehold.co/40x40.png?text=Me'
       }]);
@@ -143,7 +145,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 <DropdownMenuItem>Change Room Name</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            
+
             <div className="flex items-center gap-2">
               <Button variant="default" size="sm" className="bg-pink-600 hover:bg-pink-700 text-white">
                 <Gem className="h-4 w-4 mr-2" /> Subscribe
@@ -187,15 +189,12 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl w-[95vw] md:w-[90vw] h-auto md:h-[90vh] p-0 border-0 bg-transparent shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none">
-                     {/* DialogClose is now part of ShadCN Dialog, typically an X icon.
-                         If the modal needs its own custom close logic, pass onOpenChange to SelectMediaModal.
-                         For now, the default X from DialogContent will be used or you can add a DialogClose here.
-                      */}
+                    <DialogHeader className="sr-only">
+                      <DialogTitle>Select Media</DialogTitle>
+                    </DialogHeader>
                     <SelectMediaModal />
-                     <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground z-50 text-foreground hover:text-primary">
-                        <X className="h-5 w-5" />
-                        <span className="sr-only">Close</span>
-                    </DialogClose>
+                    {/* The custom DialogClose element previously here has been removed.
+                        The DialogContent from ui/dialog.tsx provides its own close button. */}
                   </DialogContent>
                 </Dialog>
                 <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>
@@ -286,9 +285,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             ))}
           </ScrollArea>
           <form onSubmit={handleSendMessage} className="p-3 border-t border-border flex gap-2 bg-card">
-            <Input 
-              type="text" 
-              placeholder="Type a message..." 
+            <Input
+              type="text"
+              placeholder="Type a message..."
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               className="flex-grow bg-background focus:ring-primary"
@@ -302,3 +301,5 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     </TooltipProvider>
   );
 }
+
+  
