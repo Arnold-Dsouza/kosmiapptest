@@ -7,13 +7,13 @@ import * as React from 'react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card'; 
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from '@/components/ui/dropdown-menu'; 
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArrowLeft, ChevronDown, MonitorPlay, Link2, Folder, Search, Compass, Tv, Gamepad2, Sparkles, Info, Gem, Youtube, Clapperboard, Globe, Puzzle, ScreenShare } from 'lucide-react';
 
@@ -48,7 +48,8 @@ const mediaItemsData = [
 export default function SelectMediaModal({}: SelectMediaModalProps) {
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0].id);
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentView, setCurrentView] = useState<'main' | 'loadFile'>('main');
+  const [currentView, setCurrentView] = useState<'main' | 'loadFile' | 'loadUrl'>('main');
+  const [urlInput, setUrlInput] = useState('');
 
   const filteredMediaItems = mediaItemsData.filter(item => {
     const matchesCategory = item.category.includes(activeCategoryId) || activeCategoryId === 'discover';
@@ -66,14 +67,14 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
           <h2 className="text-xl md:text-2xl font-semibold text-foreground">Select Media</h2>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <Button 
-            size="lg" 
+          <Button
+            size="lg"
             className="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold mb-8 px-6 py-3 rounded-md"
             // onClick handler for file input would be added here
           >
             Load a Video File...
           </Button>
-          
+
           <div className="mb-8">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -101,6 +102,33 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
     );
   }
 
+  if (currentView === 'loadUrl') {
+    return (
+      <div className="flex flex-col h-full max-h-[90vh] md:h-[80vh] md:max-h-[700px] w-full bg-card text-card-foreground p-0 overflow-hidden rounded-lg">
+        <div className="p-4 pr-12 border-b border-border flex items-center shrink-0">
+          <Button variant="ghost" size="icon" onClick={() => setCurrentView('main')} className="mr-2 hover:bg-primary/10">
+            <ArrowLeft className="h-6 w-6 text-foreground" />
+          </Button>
+          <h2 className="text-xl md:text-2xl font-semibold text-foreground">Select Media</h2>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center p-6">
+          <div className="flex w-full max-w-xl items-center space-x-2">
+            <Input
+              type="text"
+              placeholder="https://... or magnet:..."
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              className="bg-input border-border focus:ring-primary h-10 md:h-12 flex-grow"
+            />
+            <Button type="submit" className="bg-primary hover:bg-primary/80 h-10 md:h-12 px-6">
+              Open
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Main view (grid of media items)
   return (
     <div className="flex flex-col h-full max-h-[90vh] md:h-[80vh] md:max-h-[700px] w-full bg-card text-card-foreground p-0 overflow-hidden rounded-lg">
@@ -116,15 +144,17 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto"> <Link2 className="h-5 w-5 md:h-6 md:w-6" /> </Button>
+                <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto" onClick={() => setCurrentView('loadUrl')}>
+                  <Link2 className="h-5 w-5 md:h-6 md:w-6" />
+                </Button>
               </TooltipTrigger>
               <TooltipContent><p>Open a website in a virtual browser</p></TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="lg" 
+                <Button
+                  variant="outline"
+                  size="lg"
                   className="p-2 md:p-3 aspect-square h-auto"
                   onClick={() => setCurrentView('loadFile')}
                 >
@@ -135,9 +165,9 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
             </Tooltip>
           </div>
           <div className="w-full md:w-2/5 lg:w-1/3 relative">
-            <Input 
-              type="search" 
-              placeholder="Search apps and media content" 
+            <Input
+              type="search"
+              placeholder="Search apps and media content"
               className="bg-input border-border focus:ring-primary h-10 md:h-12 pr-10 text-sm md:text-base"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -166,8 +196,8 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
             {filteredMediaItems.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
                 {filteredMediaItems.map(item => (
-                  <Card 
-                    key={item.id} 
+                  <Card
+                    key={item.id}
                     className="overflow-hidden aspect-[16/10] flex flex-col items-center justify-center p-1 md:p-2 bg-secondary/30 hover:shadow-lg transition-shadow cursor-pointer hover:bg-secondary/50 border-border"
                   >
                     <div className="relative w-full h-full flex items-center justify-center">
@@ -189,4 +219,3 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
     </div>
   );
 }
-
