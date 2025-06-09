@@ -2,7 +2,7 @@
 "use client";
 
 import Image from 'next/image';
-import Link from 'next/link'; 
+import Link from 'next/link';
 import * as React from 'react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import { ArrowLeft, ChevronDown, MonitorPlay, Link2, Folder, Search, Compass, Tv
 
 interface SelectMediaModalProps {
   onShareScreen?: () => void;
+  onPlayUrl: (url: string) => void;
 }
 
 const categories = [
@@ -45,7 +46,7 @@ const mediaItemsData = [
 ];
 
 
-export default function SelectMediaModal({ onShareScreen }: SelectMediaModalProps) {
+export default function SelectMediaModal({ onShareScreen, onPlayUrl }: SelectMediaModalProps) {
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0].id);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentView, setCurrentView] = useState<'main' | 'loadFile' | 'loadUrl'>('main');
@@ -56,6 +57,14 @@ export default function SelectMediaModal({ onShareScreen }: SelectMediaModalProp
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
+
+  const handleOpenUrl = () => {
+    if (urlInput.trim()) {
+      onPlayUrl(urlInput.trim());
+      setUrlInput('');
+      setCurrentView('main'); // Optionally close modal or go back to main view
+    }
+  };
 
   if (currentView === 'loadFile') {
     return (
@@ -119,7 +128,7 @@ export default function SelectMediaModal({ onShareScreen }: SelectMediaModalProp
               onChange={(e) => setUrlInput(e.target.value)}
               className="bg-input border-border focus:ring-primary h-10 md:h-12 flex-grow"
             />
-            <Button type="submit" className="bg-primary hover:bg-primary/80 h-10 md:h-12 px-6">
+            <Button onClick={handleOpenUrl} className="bg-primary hover:bg-primary/80 h-10 md:h-12 px-6">
               Open
             </Button>
           </div>
@@ -137,8 +146,8 @@ export default function SelectMediaModal({ onShareScreen }: SelectMediaModalProp
              <h2 className="text-xl md:text-2xl font-semibold mr-2 md:mr-4 text-foreground">Select</h2>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto" onClick={() => { if (onShareScreen) { onShareScreen(); } }}> 
-                  <MonitorPlay className="h-5 w-5 md:h-6 md:w-6" /> 
+                <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto" onClick={() => { if (onShareScreen) { onShareScreen(); } }}>
+                  <MonitorPlay className="h-5 w-5 md:h-6 md:w-6" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent><p>Share your screen or an application window</p></TooltipContent>
@@ -220,4 +229,3 @@ export default function SelectMediaModal({ onShareScreen }: SelectMediaModalProp
     </div>
   );
 }
-

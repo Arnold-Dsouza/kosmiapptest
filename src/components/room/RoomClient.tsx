@@ -75,20 +75,21 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaFrameRef = useRef<HTMLIFrameElement>(null);
   const placeholderContentRef = useRef<HTMLDivElement>(null);
-  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  
   const [isSelectMediaModalOpen, setIsSelectMediaModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [roomLink, setRoomLink] = useState('');
   const { toast } = useToast();
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const [currentMediaUrl, setCurrentMediaUrl] = useState<string | null>(null);
 
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setMessages(prev => [...prev, {id: Date.now().toString(), user: "System", text: `Welcome to room ${roomId}! This is a new design.`, timestamp: new Date()}]);
     }, 1000);
-    // Set room link on client side
     if (typeof window !== "undefined") {
       setRoomLink(window.location.href);
     }
@@ -109,6 +110,17 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     }
   };
 
+  const stopMediaPlayback = () => {
+    setCurrentMediaUrl(null);
+    if (mediaFrameRef.current) {
+      mediaFrameRef.current.src = '';
+      mediaFrameRef.current.classList.add('hidden');
+    }
+    if (placeholderContentRef.current && !screenStreamRef.current) {
+      placeholderContentRef.current.classList.remove('hidden');
+    }
+  };
+  
   const stopScreenShare = () => {
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach(track => track.stop());
@@ -118,24 +130,64 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       videoRef.current.srcObject = null;
       videoRef.current.classList.add('hidden');
     }
-    if (placeholderContentRef.current) {
+    if (placeholderContentRef.current && !currentMediaUrl) {
       placeholderContentRef.current.classList.remove('hidden');
+    } else if (mediaFrameRef.current && currentMediaUrl) {
+       mediaFrameRef.current.classList.remove('hidden');
     }
   };
 
-  const handleShareScreen = async () => {
-    if (isSelectMediaModalOpen) {
-      setIsSelectMediaModalOpen(false);
+  const getYouTubeEmbedUrl = (url: string): string | null => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    if (match && match[2].length === 11) {
+      return `https://www.youtube.com/embed/${match[2]}?autoplay=1`;
     }
+    return null;
+  };
+
+  const handlePlayUrl = (url: string) => {
+    if (screenStreamRef.current) {
+      stopScreenShare();
+    }
+    
+    const embedUrl = getYouTubeEmbedUrl(url);
+    if (embedUrl) {
+      setCurrentMediaUrl(embedUrl);
+      if (mediaFrameRef.current) {
+        mediaFrameRef.current.src = embedUrl;
+        mediaFrameRef.current.classList.remove('hidden');
+      }
+      if (placeholderContentRef.current) {
+        placeholderContentRef.current.classList.add('hidden');
+      }
+      if (videoRef.current) {
+        videoRef.current.classList.add('hidden');
+      }
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Unsupported URL",
+        description: "Only YouTube video URLs are supported for now.",
+      });
+      // Optionally, try to embed directly or handle other URLs
+      // setCurrentMediaUrl(url); // For direct embedding attempt
+    }
+    setIsSelectMediaModalOpen(false);
+  };
+
+  const handleShareScreen = async () => {
+    if (isSelectMediaModalOpen) setIsSelectMediaModalOpen(false);
+    if (currentMediaUrl) stopMediaPlayback(); // Stop any existing media playback
 
     if (screenStreamRef.current) {
-        stopScreenShare();
+        stopScreenShare(); // If already sharing, stop it first (acts as a toggle)
     }
 
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: true, 
+        audio: true,
       });
       screenStreamRef.current = stream;
 
@@ -144,9 +196,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         videoRef.current.play().catch(error => console.error("Error playing video:", error));
         videoRef.current.classList.remove('hidden');
       }
-      if (placeholderContentRef.current) {
-        placeholderContentRef.current.classList.add('hidden');
-      }
+      if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
+      if (mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden');
+
 
       stream.getVideoTracks()[0].onended = () => {
         stopScreenShare();
@@ -159,7 +211,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         description: err.message || "Could not start screen sharing. Please ensure permission is granted.",
       });
       if (videoRef.current) videoRef.current.classList.add('hidden');
-      if (placeholderContentRef.current) placeholderContentRef.current.classList.remove('hidden');
+      if (placeholderContentRef.current && !currentMediaUrl) placeholderContentRef.current.classList.remove('hidden');
+      else if (mediaFrameRef.current && currentMediaUrl) mediaFrameRef.current.classList.remove('hidden');
     }
   };
 
@@ -261,8 +314,15 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
           {/* Content Area */}
           <main className="flex-1 flex flex-col items-center justify-center p-4 relative bg-background">
-            <div className="w-full max-w-4xl aspect-[16/7] bg-black/50 rounded-lg shadow-2xl flex flex-col items-center justify-center border border-border">
-              <video ref={videoRef} className="w-full h-full object-cover rounded-md hidden" autoPlay muted playsInline />
+            <div className="w-full max-w-4xl aspect-[16/7] bg-black/50 rounded-lg shadow-2xl flex flex-col items-center justify-center border border-border overflow-hidden">
+              <video ref={videoRef} className="w-full h-full object-contain rounded-md hidden" autoPlay muted playsInline />
+              <iframe 
+                ref={mediaFrameRef} 
+                className="w-full h-full border-0 hidden" // Initially hidden
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowFullScreen
+                title="Media Content"
+              ></iframe>
               <div ref={placeholderContentRef} className="text-center p-8">
                 <h2 className="text-2xl font-semibold text-muted-foreground mb-4">Your virtual space is ready.</h2>
                 <Dialog open={isSelectMediaModalOpen} onOpenChange={setIsSelectMediaModalOpen}>
@@ -276,7 +336,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                         <DialogTitle>Select Media</DialogTitle>
                         <DialogDescription>Choose content to share in the room.</DialogDescription>
                       </DialogHeader>
-                    <SelectMediaModal onShareScreen={handleShareScreen} />
+                    <SelectMediaModal onShareScreen={handleShareScreen} onPlayUrl={handlePlayUrl} />
                   </DialogContent>
                 </Dialog>
                 <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>
@@ -348,7 +408,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             <div className="flex items-center justify-around gap-2">
                <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" onClick={() => setIsMicOn(!isMicOn)} className="flex-1">
+                   <Button 
+                    onClick={() => setIsMicOn(!isMicOn)}
+                    className="flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground shadow-md active:shadow-inner active:translate-y-px border-b-4 border-muted"
+                    size="icon"
+                  >
                     {isMicOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5 text-destructive" />}
                   </Button>
                 </TooltipTrigger>
@@ -356,7 +420,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" onClick={() => setIsCameraOn(!isCameraOn)} className="flex-1">
+                  <Button 
+                    onClick={() => setIsCameraOn(!isCameraOn)}
+                    className="flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground shadow-md active:shadow-inner active:translate-y-px border-b-4 border-muted"
+                    size="icon"
+                  >
                     {isCameraOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5 text-destructive" />}
                   </Button>
                 </TooltipTrigger>
@@ -408,3 +476,4 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     </TooltipProvider>
   );
 }
+
