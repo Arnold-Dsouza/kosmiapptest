@@ -60,11 +60,11 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-background text-foreground">
       <Navbar />
       <main className="flex-grow">
         {/* Hero Section */}
-        <section className="py-20 md:py-32 bg-gradient-to-br from-background to-secondary/50">
+        <section className="py-20 md:py-32 bg-gradient-to-br from-background to-secondary/30">
           <div className="container text-center">
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight font-headline">
               Your Space, Your Rules. <span className="text-primary">Instantly.</span>
@@ -77,9 +77,9 @@ export default function Home() {
               <Input
                 type="text"
                 placeholder="Enter room name (optional)"
-                className="h-12 text-base shadow-sm focus:ring-primary focus:border-primary"
+                className="h-12 text-base shadow-sm focus:ring-primary focus:border-primary bg-input text-foreground placeholder:text-muted-foreground"
               />
-              <Button size="lg" className="h-12 text-base shadow-md hover:shadow-lg transition-shadow" asChild>
+              <Button size="lg" className="h-12 text-base shadow-md hover:shadow-lg transition-shadow bg-primary hover:bg-primary/80 text-primary-foreground" asChild>
                 <Link href="/room/my-awesome-room">Create Room</Link>
               </Button>
             </div>
@@ -92,7 +92,7 @@ export default function Home() {
         {/* Features Section */}
         <section id="features" className="py-16 md:py-24 bg-background">
           <div className="container">
-            <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 font-headline">
+            <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 font-headline text-foreground">
               Everything You Need to <span className="text-primary">Connect & Play</span>
             </h2>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -111,13 +111,13 @@ export default function Home() {
         </section>
 
         {/* Highlights Section */}
-        <section className="py-16 md:py-24 bg-secondary/30">
+        <section className="py-16 md:py-24 bg-secondary/20">
           <div className="container">
             <div className="grid md:grid-cols-3 gap-8 text-center">
               {highlights.map((highlight) => (
                 <div key={highlight.text} className="p-6 bg-card rounded-lg shadow-md">
                   <highlight.icon className="h-12 w-12 text-accent mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold mb-2 font-headline">{highlight.text.split(':')[0]}</h3>
+                  <h3 className="text-xl font-semibold mb-2 font-headline text-card-foreground">{highlight.text.split(':')[0]}</h3>
                   <p className="text-muted-foreground">{highlight.text.split(':')[1]?.trim()}</p>
                 </div>
               ))}
@@ -128,7 +128,7 @@ export default function Home() {
         {/* "And More" Section */}
         <section className="py-16 md:py-24 bg-background">
           <div className="container text-center">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 font-headline">And So Much More...</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 font-headline text-foreground">And So Much More...</h2>
             <p className="max-w-xl mx-auto text-lg text-muted-foreground mb-8">
               Virtual Hub is packed with features to make your online gatherings unforgettable. From custom room settings to moderation tools, you're in control.
             </p>
@@ -150,7 +150,7 @@ export default function Home() {
             <p className="max-w-lg mx-auto text-lg text-primary-foreground/90 mb-8">
               It takes just a click to create your own private space. No downloads, no hassle.
             </p>
-            <Button size="lg" variant="secondary" className="text-lg h-14 px-8 shadow-md hover:shadow-lg transition-shadow" asChild>
+            <Button size="lg" variant="secondary" className="text-lg h-14 px-8 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/80 text-accent-foreground" asChild>
               <Link href="/room/start-now-room">Create Your Free Room Now</Link>
             </Button>
           </div>

@@ -1,15 +1,42 @@
+
 "use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link'; // Added import for Link
+import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Video, ScreenShare, Edit3, Gamepad2, Users, Settings, MessageSquare, Send, LogOut, Mic, MicOff, VideoOff, Maximize } from 'lucide-react';
+import {
+  Video,
+  ScreenShare,
+  Users,
+  Settings,
+  MessageSquare,
+  Send,
+  LogOut,
+  Mic,
+  MicOff,
+  VideoOff,
+  Maximize,
+  ChevronDown,
+  PlaySquare,
+  UserPlus,
+  PenTool,
+  Bell,
+  Gem,
+  PlusCircle,
+  Globe,
+} from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface RoomClientProps {
   roomId: string;
@@ -23,21 +50,28 @@ interface Message {
   timestamp: Date;
 }
 
+// Placeholder users for the couch
+const placeholderUsers = [
+  { id: '1', name: 'Alex', avatarUrl: 'https://placehold.co/80x80.png?text=A' , hint: 'person avatar'},
+  { id: '2', name: 'Sam', avatarUrl: 'https://placehold.co/80x80.png?text=S' , hint: 'person avatar'},
+  { id: '3', name: 'Casey', avatarUrl: 'https://placehold.co/80x80.png?text=C' , hint: 'person avatar'},
+];
+
+
 export default function RoomClient({ roomId }: RoomClientProps) {
-  const [currentView, setCurrentView] = useState('video'); // 'video', 'whiteboard', 'games'
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
 
-  // Effect to simulate receiving messages for placeholder
   useEffect(() => {
     const timer = setTimeout(() => {
-      setMessages(prev => [...prev, {id: Date.now().toString(), user: "System", text: `Welcome to room ${roomId}!`, timestamp: new Date()}]);
+      setMessages(prev => [...prev, {id: Date.now().toString(), user: "System", text: `Welcome to room ${roomId}! This is a new design.`, timestamp: new Date()}]);
     }, 1000);
     return () => clearTimeout(timer);
   }, [roomId]);
-
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,50 +81,141 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         user: 'You', 
         text: chatInput.trim(), 
         timestamp: new Date(),
-        avatar: 'https://placehold.co/40x40.png'
+        avatar: 'https://placehold.co/40x40.png?text=Me'
       }]);
       setChatInput('');
     }
   };
 
-  const renderMainContent = () => {
-    switch (currentView) {
-      case 'whiteboard':
-        return <div className="flex-grow bg-card flex items-center justify-center rounded-lg shadow-inner"><p className="text-2xl text-muted-foreground">Shared Whiteboard Area</p></div>;
-      case 'games':
-        return <div className="flex-grow bg-card flex items-center justify-center rounded-lg shadow-inner"><p className="text-2xl text-muted-foreground">Embedded Games Area</p></div>;
-      case 'video':
-      default:
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="aspect-video bg-muted flex items-center justify-center overflow-hidden relative group">
-                <Avatar className="h-16 w-16">
-                  <AvatarImage src={`https://placehold.co/100x100.png?text=User${i+1}`} alt={`User ${i+1}`} data-ai-hint="person avatar" />
-                  <AvatarFallback>{`U${i+1}`}</AvatarFallback>
-                </Avatar>
-                <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-xs">User {i+1}</div>
-                <Button variant="ghost" size="icon" className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Maximize className="h-4 w-4" />
-                </Button>
-              </Card>
-            ))}
-          </div>
-        );
-    }
-  };
-
   return (
     <TooltipProvider>
-      <div className="flex h-screen bg-secondary/30 text-foreground">
-        {/* Main Content Area */}
-        <main className="flex-1 flex flex-col p-4 gap-4">
-          <header className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold font-headline">Room: <span className="text-primary">{roomId}</span></h1>
+      <div className="flex h-screen bg-background text-foreground overflow-hidden">
+        {/* Left Toolbar */}
+        <aside className="w-16 bg-card p-3 flex flex-col items-center space-y-4 border-r border-border">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
+                <PenTool className="h-6 w-6" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right"><p>Drawing Tools</p></TooltipContent>
+          </Tooltip>
+           <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
+                <PlusCircle className="h-6 w-6" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right"><p>Add Content</p></TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
+                <Globe className="h-6 w-6" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right"><p>Explore Rooms</p></TooltipContent>
+          </Tooltip>
+        </aside>
+
+        {/* Main Area Container */}
+        <div className="flex-1 flex flex-col">
+          {/* Top Bar */}
+          <header className="p-3 flex justify-between items-center border-b border-border bg-card/50 backdrop-blur-sm">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="text-lg font-semibold hover:bg-primary/10">
+                  {roomId}'s room
+                  <ChevronDown className="h-5 w-5 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem>Room Settings</DropdownMenuItem>
+                <DropdownMenuItem>Change Room Name</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            
             <div className="flex items-center gap-2">
+              <Button variant="default" size="sm" className="bg-pink-600 hover:bg-pink-700 text-white">
+                <Gem className="h-4 w-4 mr-2" /> Subscribe
+              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon"><Bell className="h-5 w-5" /></Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Notifications</p></TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon"><Users className="h-5 w-5" /></Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Participants</p></TooltipContent>
+              </Tooltip>
                <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" onClick={() => setIsMicOn(!isMicOn)}>
+                  <Button variant="ghost" size="icon"><Maximize className="h-5 w-5" /></Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Fullscreen</p></TooltipContent>
+              </Tooltip>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/">
+                  <LogOut className="h-4 w-4 mr-1 md:mr-2" /> <span className="hidden md:inline">Leave</span>
+                </Link>
+              </Button>
+            </div>
+          </header>
+
+          {/* Content Area */}
+          <main className="flex-1 flex flex-col items-center justify-center p-4 relative bg-background">
+            {/* Placeholder for actual video/content screen */}
+            <div className="w-full max-w-4xl aspect-[16/7] bg-black/50 rounded-lg shadow-2xl flex flex-col items-center justify-center border border-border">
+               {/* This could be a video player, whiteboard, or game iframe later */}
+              <video ref={videoRef} className="w-full h-full object-cover rounded-md hidden" autoPlay muted />
+              <div className="text-center p-8">
+                <h2 className="text-2xl font-semibold text-muted-foreground mb-4">Your virtual space is ready.</h2>
+                <Button size="lg" className="bg-primary hover:bg-primary/80">
+                  <PlaySquare className="h-6 w-6 mr-2" /> Select Media
+                </Button>
+                <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>
+              </div>
+            </div>
+
+            {/* "Couch" Area with User Avatars */}
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4/5 md:w-1/2 lg:w-1/3 h-20 md:h-28 bg-muted/30 rounded-t-full flex justify-center items-end p-2 pb-0 space-x-2 md:space-x-4 shadow-xl backdrop-blur-sm">
+              {placeholderUsers.map(user => (
+                <Tooltip key={user.id}>
+                  <TooltipTrigger asChild>
+                    <Avatar className="h-12 w-12 md:h-16 md:w-16 border-2 border-primary ring-2 ring-primary/50 mb-2 md:mb-3 hover:scale-110 transition-transform cursor-pointer">
+                      <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint={user.hint} />
+                      <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                  </TooltipTrigger>
+                  <TooltipContent><p>{user.name}</p></TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
+          </main>
+        </div>
+
+        {/* Right Chat Sidebar */}
+        <aside className="w-80 lg:w-96 bg-card border-l border-border flex flex-col">
+          <div className="p-4 border-b border-border">
+            <h2 className="text-xl font-semibold mb-3 flex items-center justify-between font-headline">
+              Room Menu
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon"><Settings className="h-5 w-5" /></Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Room Settings</p></TooltipContent>
+              </Tooltip>
+            </h2>
+            <Button className="w-full mb-3 bg-primary/90 hover:bg-primary">
+              <UserPlus className="h-5 w-5 mr-2" /> Invite Friends
+            </Button>
+            <div className="flex items-center justify-around gap-2">
+               <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={() => setIsMicOn(!isMicOn)} className="flex-1">
                     {isMicOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5 text-destructive" />}
                   </Button>
                 </TooltipTrigger>
@@ -98,7 +223,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" onClick={() => setIsCameraOn(!isCameraOn)}>
+                  <Button variant="outline" size="icon" onClick={() => setIsCameraOn(!isCameraOn)} className="flex-1">
                     {isCameraOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5 text-destructive" />}
                   </Button>
                 </TooltipTrigger>
@@ -106,54 +231,17 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon"><ScreenShare className="h-5 w-5" /></Button>
+                  <Button variant="outline" size="icon" className="flex-1"><ScreenShare className="h-5 w-5" /></Button>
                 </TooltipTrigger>
                 <TooltipContent><p>Share Screen</p></TooltipContent>
               </Tooltip>
-              <Separator orientation="vertical" className="h-8 mx-2" />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon"><Users className="h-5 w-5" /></Button>
-                </TooltipTrigger>
-                <TooltipContent><p>Participants</p></TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon"><Settings className="h-5 w-5" /></Button>
-                </TooltipTrigger>
-                <TooltipContent><p>Room Settings</p></TooltipContent>
-              </Tooltip>
-              <Button variant="destructive" size="sm" asChild>
-                <Link href="/">
-                  <LogOut className="h-4 w-4 mr-2" /> Leave
-                </Link>
-              </Button>
             </div>
-          </header>
-
-          <div className="flex-grow flex flex-col bg-background p-4 rounded-lg shadow-md">
-            {renderMainContent()}
           </div>
-          
-          <nav className="bg-background p-2 rounded-lg shadow-md flex justify-center items-center gap-2">
-            <Button variant={currentView === 'video' ? 'default' : 'outline'} onClick={() => setCurrentView('video')} className="gap-2">
-              <Video className="h-5 w-5" /> Video Grid
-            </Button>
-            <Button variant={currentView === 'whiteboard' ? 'default' : 'outline'} onClick={() => setCurrentView('whiteboard')} className="gap-2">
-              <Edit3 className="h-5 w-5" /> Whiteboard
-            </Button>
-            <Button variant={currentView === 'games' ? 'default' : 'outline'} onClick={() => setCurrentView('games')} className="gap-2">
-              <Gamepad2 className="h-5 w-5" /> Games
-            </Button>
-          </nav>
-        </main>
+          <div className="p-2 text-sm text-muted-foreground border-b border-border">
+            <Users className="h-4 w-4 inline mr-1" /> {placeholderUsers.length + 1} online
+          </div>
 
-        {/* Sidebar for Chat */}
-        <aside className="w-80 lg:w-96 bg-background border-l border-border flex flex-col p-4">
-          <h2 className="text-xl font-semibold mb-3 flex items-center gap-2 font-headline">
-            <MessageSquare className="h-6 w-6 text-primary" /> Live Chat
-          </h2>
-          <ScrollArea className="flex-grow mb-3 pr-3 border rounded-md p-2 bg-muted/30 shadow-inner">
+          <ScrollArea className="flex-grow p-3 pr-2">
             {messages.map((msg) => (
               <div key={msg.id} className={`flex gap-2 mb-3 ${msg.user === 'You' ? 'justify-end' : ''}`}>
                 {msg.user !== 'You' && (
@@ -162,8 +250,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     <AvatarFallback>{msg.user.charAt(0)}</AvatarFallback>
                   </Avatar>
                 )}
-                <div className={`max-w-[75%] p-2 rounded-lg shadow-sm ${msg.user === 'You' ? 'bg-primary text-primary-foreground' : 'bg-card'}`}>
-                  <p className="text-xs font-semibold mb-0.5">{msg.user}</p>
+                <div className={`max-w-[75%] p-2 rounded-lg shadow-sm ${msg.user === 'You' ? 'bg-primary text-primary-foreground' : 'bg-secondary'}`}>
+                  <p className="text-xs font-semibold mb-0.5">{msg.user === 'System' ? 'System Notice' : msg.user}</p>
                   <p className="text-sm">{msg.text}</p>
                   <p className="text-xs text-muted-foreground/80 mt-1 text-right">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                 </div>
@@ -176,15 +264,15 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </div>
             ))}
           </ScrollArea>
-          <form onSubmit={handleSendMessage} className="flex gap-2">
+          <form onSubmit={handleSendMessage} className="p-3 border-t border-border flex gap-2 bg-card">
             <Input 
               type="text" 
               placeholder="Type a message..." 
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              className="flex-grow"
+              className="flex-grow bg-background focus:ring-primary"
             />
-            <Button type="submit" size="icon" aria-label="Send message">
+            <Button type="submit" size="icon" aria-label="Send message" className="bg-primary hover:bg-primary/80">
               <Send className="h-5 w-5" />
             </Button>
           </form>
