@@ -362,14 +362,6 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </TooltipTrigger>
                 <TooltipContent><p>{isCameraOn ? "Stop Camera" : "Start Camera"}</p></TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" className="flex-1" onClick={handleShareScreen}>
-                    <ScreenShare className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent><p>Share Screen</p></TooltipContent>
-              </Tooltip>
             </div>
           </div>
           <div className="p-2 text-sm text-muted-foreground border-b border-border">
