@@ -112,13 +112,13 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
               <TooltipTrigger asChild>
                 <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto"> <MonitorPlay className="h-5 w-5 md:h-6 md:w-6" /> </Button>
               </TooltipTrigger>
-              <TooltipContent><p>Screen</p></TooltipContent>
+              <TooltipContent><p>Share your screen or an application window</p></TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto"> <Link2 className="h-5 w-5 md:h-6 md:w-6" /> </Button>
               </TooltipTrigger>
-              <TooltipContent><p>URL</p></TooltipContent>
+              <TooltipContent><p>Open a website in a virtual browser</p></TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -131,7 +131,7 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
                   <Folder className="h-5 w-5 md:h-6 md:w-6" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent><p>File</p></TooltipContent>
+              <TooltipContent><p>Load a video from your computer</p></TooltipContent>
             </Tooltip>
           </div>
           <div className="w-full md:w-2/5 lg:w-1/3 relative">
