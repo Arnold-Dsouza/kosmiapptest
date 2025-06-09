@@ -24,10 +24,9 @@ import {
   UserPlus,
   PenTool,
   Bell,
-  Gem,
   PlusCircle,
   Globe,
-  X, // X icon is still available if needed, but DialogClose component is not used directly here.
+  // X, // X icon is still available if needed, but DialogClose component is not used directly here.
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -147,9 +146,6 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             </DropdownMenu>
 
             <div className="flex items-center gap-2">
-              <Button variant="default" size="sm" className="bg-pink-600 hover:bg-pink-700 text-white">
-                <Gem className="h-4 w-4 mr-2" /> Subscribe
-              </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon"><Bell className="h-5 w-5" /></Button>
@@ -193,8 +189,6 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                       <DialogTitle>Select Media</DialogTitle>
                     </DialogHeader>
                     <SelectMediaModal />
-                    {/* The custom DialogClose element previously here has been removed.
-                        The DialogContent from ui/dialog.tsx provides its own close button. */}
                   </DialogContent>
                 </Dialog>
                 <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>
@@ -301,5 +295,3 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     </TooltipProvider>
   );
 }
-
-  
