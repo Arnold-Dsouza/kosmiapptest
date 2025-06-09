@@ -7,13 +7,14 @@ import * as React from 'react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card'; // Keep Card if used, or remove
+import { Card, CardContent } from '@/components/ui/card'; 
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
   DropdownMenuTrigger 
-} from '@/components/ui/dropdown-menu'; // Added for Advanced Settings
+} from '@/components/ui/dropdown-menu'; 
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArrowLeft, ChevronDown, MonitorPlay, Link2, Folder, Search, Compass, Tv, Gamepad2, Sparkles, Info, Gem, Youtube, Clapperboard, Globe, Puzzle, ScreenShare } from 'lucide-react';
 
 interface SelectMediaModalProps {
@@ -51,7 +52,6 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
 
   const filteredMediaItems = mediaItemsData.filter(item => {
     const matchesCategory = item.category.includes(activeCategoryId) || activeCategoryId === 'discover';
-    // No longer filtering by activeFilterTabId as tabs are removed
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
@@ -108,16 +108,31 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
         <div className="flex flex-col md:flex-row justify-between items-center gap-3 md:gap-0">
            <div className="flex items-center gap-2">
              <h2 className="text-xl md:text-2xl font-semibold mr-2 md:mr-4 text-foreground">Select</h2>
-            <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto"> <MonitorPlay className="h-5 w-5 md:h-6 md:w-6" /> </Button>
-            <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto"> <Link2 className="h-5 w-5 md:h-6 md:w-6" /> </Button>
-            <Button 
-              variant="outline" 
-              size="lg" 
-              className="p-2 md:p-3 aspect-square h-auto"
-              onClick={() => setCurrentView('loadFile')}
-            >
-              <Folder className="h-5 w-5 md:h-6 md:w-6" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto"> <MonitorPlay className="h-5 w-5 md:h-6 md:w-6" /> </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>Screen</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto"> <Link2 className="h-5 w-5 md:h-6 md:w-6" /> </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>URL</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="lg" 
+                  className="p-2 md:p-3 aspect-square h-auto"
+                  onClick={() => setCurrentView('loadFile')}
+                >
+                  <Folder className="h-5 w-5 md:h-6 md:w-6" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>File</p></TooltipContent>
+            </Tooltip>
           </div>
           <div className="w-full md:w-2/5 lg:w-1/3 relative">
             <Input 
@@ -148,7 +163,6 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
         </aside>
 
         <main className="flex-1 p-3 md:p-6 overflow-y-auto">
-           {/* Content is directly rendered here as TabsContent is removed */}
             {filteredMediaItems.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
                 {filteredMediaItems.map(item => (
