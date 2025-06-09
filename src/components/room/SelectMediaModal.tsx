@@ -59,7 +59,7 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
   if (currentView === 'loadFile') {
     return (
       <div className="flex flex-col h-full max-h-[90vh] md:h-[80vh] md:max-h-[700px] w-full bg-card text-card-foreground p-0 overflow-hidden rounded-lg">
-        <div className="p-4 border-b border-border flex items-center shrink-0">
+        <div className="p-4 pr-12 border-b border-border flex items-center shrink-0">
           <Button variant="ghost" size="icon" onClick={() => setCurrentView('main')} className="mr-2 hover:bg-primary/10">
             <ArrowLeft className="h-6 w-6 text-foreground" />
           </Button>
@@ -104,7 +104,7 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
   // Main view (grid of media items)
   return (
     <div className="flex flex-col h-full max-h-[90vh] md:h-[80vh] md:max-h-[700px] w-full bg-card text-card-foreground p-0 overflow-hidden rounded-lg">
-      <div className="p-3 md:p-4 border-b border-border shrink-0">
+      <div className="p-3 md:p-4 pr-10 md:pr-12 border-b border-border shrink-0">
         <div className="flex flex-col md:flex-row justify-between items-center gap-3 md:gap-0">
            <div className="flex items-center gap-2">
              <h2 className="text-xl md:text-2xl font-semibold mr-2 md:mr-4 text-foreground">Select</h2>
