@@ -47,7 +47,7 @@ export default function Navbar() {
     roomId = roomId.split('?')[0].split('#')[0];
 
     if (roomId) {
-      const formattedRoomId = roomId.toLowerCase().replace(/\s+/g, '-');
+      const formattedRoomId = roomId.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       router.push(`/room/${formattedRoomId}`);
       setIsJoinRoomDialogOpen(false);
       setJoinRoomInput('');
@@ -58,6 +58,15 @@ export default function Navbar() {
         description: "Could not extract a valid room ID from your input.",
       });
     }
+  };
+
+  const generateRandomSuffix = (length = 7) => {
+    return Math.random().toString(36).substring(2, 2 + length);
+  };
+
+  const handleQuickCreateRoom = () => {
+    const uniqueRoomId = `room-${generateRandomSuffix()}`;
+    router.push(`/room/${uniqueRoomId}`);
   };
 
   return (
@@ -79,8 +88,11 @@ export default function Navbar() {
             >
               Join Room
             </Button>
-            <Button asChild className="bg-primary hover:bg-primary/80 text-primary-foreground">
-              <Link href="/room/new-room">Create Room</Link>
+            <Button 
+              onClick={handleQuickCreateRoom} 
+              className="bg-primary hover:bg-primary/80 text-primary-foreground"
+            >
+              Create Room
             </Button>
           </div>
         </div>

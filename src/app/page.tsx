@@ -17,7 +17,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger, // Not used for programmatic opening here, but good practice to have if needed
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Film, Gamepad2, Users, ScreenShare, Edit3, Music, CheckCircle, Server, Globe } from 'lucide-react';
@@ -78,13 +77,25 @@ export default function Home() {
     { icon: Server, text: 'Powerful & Customizable: Tailor your room to your liking.' },
   ];
 
+  const generateRandomSuffix = (length = 5) => {
+    return Math.random().toString(36).substring(2, 2 + length);
+  };
+
   const handleCreateRoom = () => {
     if (roomNameInput.trim()) {
-      const formattedRoomName = roomNameInput.trim().toLowerCase().replace(/\s+/g, '-');
-      router.push(`/room/${formattedRoomName}`);
+      const formattedBaseName = roomNameInput.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const randomSuffix = generateRandomSuffix();
+      const uniqueRoomId = `${formattedBaseName}-${randomSuffix}`;
+      router.push(`/room/${uniqueRoomId}`);
       setIsCreateRoomDialogOpen(false);
       setRoomNameInput('');
     }
+  };
+
+  const handleQuickCreateRoom = () => {
+    const randomSuffix = generateRandomSuffix(7);
+    const uniqueRoomId = `room-${randomSuffix}`;
+    router.push(`/room/${uniqueRoomId}`);
   };
 
   return (
@@ -107,11 +118,11 @@ export default function Home() {
                 className="h-12 text-base shadow-md hover:shadow-lg transition-shadow bg-primary hover:bg-primary/80 text-primary-foreground"
                 onClick={() => setIsCreateRoomDialogOpen(true)}
               >
-                Create Room
+                Create Room With Name
               </Button>
             </div>
             <p className="mt-4 text-sm text-muted-foreground">
-              or <Link href="/room/public-lobby" className="text-primary hover:underline">join an existing room</Link>
+              or <Button variant="link" className="text-primary p-0 h-auto" onClick={handleQuickCreateRoom}>create a quick room</Button>
             </p>
           </div>
         </section>
@@ -177,8 +188,13 @@ export default function Home() {
             <p className="max-w-lg mx-auto text-lg text-primary-foreground/90 mb-8">
               It takes just a click to create your own private space. No downloads, no hassle.
             </p>
-            <Button size="lg" variant="secondary" className="text-lg h-14 px-8 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/80 text-accent-foreground" asChild>
-              <Link href="/room/start-now-room">Create Your Free Room Now</Link>
+            <Button 
+              size="lg" 
+              variant="secondary" 
+              className="text-lg h-14 px-8 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/80 text-accent-foreground" 
+              onClick={handleQuickCreateRoom}
+            >
+              Create Your Free Room Now
             </Button>
           </div>
         </section>
@@ -190,7 +206,7 @@ export default function Home() {
           <DialogHeader>
             <DialogTitle>Set Room Name</DialogTitle>
             <DialogDescription>
-              Enter a name for your new room. This will be part of the room's URL.
+              Enter a name for your new room. A random suffix will be added to ensure uniqueness.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -204,6 +220,11 @@ export default function Home() {
                 onChange={(e) => setRoomNameInput(e.target.value)}
                 className="col-span-3"
                 placeholder="e.g., movie-night"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreateRoom();
+                  }
+                }}
               />
             </div>
           </div>
