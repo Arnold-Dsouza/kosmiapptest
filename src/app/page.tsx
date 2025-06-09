@@ -1,13 +1,32 @@
+
+"use client";
+
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import FeatureCard from '@/components/FeatureCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger, // Not used for programmatic opening here, but good practice to have if needed
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Film, Gamepad2, Users, ScreenShare, Edit3, Music, CheckCircle, Server, Globe } from 'lucide-react';
 
 export default function Home() {
+  const router = useRouter();
+  const [isCreateRoomDialogOpen, setIsCreateRoomDialogOpen] = useState(false);
+  const [roomNameInput, setRoomNameInput] = useState('');
+
   const features = [
     {
       icon: Film,
@@ -59,6 +78,15 @@ export default function Home() {
     { icon: Server, text: 'Powerful & Customizable: Tailor your room to your liking.' },
   ];
 
+  const handleCreateRoom = () => {
+    if (roomNameInput.trim()) {
+      const formattedRoomName = roomNameInput.trim().toLowerCase().replace(/\s+/g, '-');
+      router.push(`/room/${formattedRoomName}`);
+      setIsCreateRoomDialogOpen(false);
+      setRoomNameInput('');
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <Navbar />
@@ -73,14 +101,13 @@ export default function Home() {
               Create a room, invite your friends, and enjoy videos, games, and more together. 
               No sign-up needed, completely free.
             </p>
-            <div className="mt-10 max-w-md mx-auto flex flex-col sm:flex-row gap-4">
-              <Input
-                type="text"
-                placeholder="Enter room name (optional)"
-                className="h-12 text-base shadow-sm focus:ring-primary focus:border-primary bg-input text-foreground placeholder:text-muted-foreground"
-              />
-              <Button size="lg" className="h-12 text-base shadow-md hover:shadow-lg transition-shadow bg-primary hover:bg-primary/80 text-primary-foreground" asChild>
-                <Link href="/room/my-awesome-room">Create Room</Link>
+            <div className="mt-10 max-w-md mx-auto flex flex-col sm:flex-row justify-center">
+              <Button 
+                size="lg" 
+                className="h-12 text-base shadow-md hover:shadow-lg transition-shadow bg-primary hover:bg-primary/80 text-primary-foreground"
+                onClick={() => setIsCreateRoomDialogOpen(true)}
+              >
+                Create Room
               </Button>
             </div>
             <p className="mt-4 text-sm text-muted-foreground">
@@ -157,6 +184,41 @@ export default function Home() {
         </section>
       </main>
       <Footer />
+
+      <Dialog open={isCreateRoomDialogOpen} onOpenChange={setIsCreateRoomDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Set Room Name</DialogTitle>
+            <DialogDescription>
+              Enter a name for your new room. This will be part of the room's URL.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="room-name-modal" className="text-right">
+                Name
+              </Label>
+              <Input
+                id="room-name-modal"
+                value={roomNameInput}
+                onChange={(e) => setRoomNameInput(e.target.value)}
+                className="col-span-3"
+                placeholder="e.g., movie-night"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              type="submit" 
+              onClick={handleCreateRoom}
+              disabled={!roomNameInput.trim()}
+              className="bg-primary hover:bg-primary/80 text-primary-foreground"
+            >
+              Create & Go
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
