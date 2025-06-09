@@ -26,7 +26,6 @@ import {
   Bell,
   PlusCircle,
   Globe,
-  // X, // X icon is still available if needed, but DialogClose component is not used directly here.
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -41,11 +40,11 @@ import {
   Dialog,
   DialogContent,
   DialogTrigger,
-  DialogHeader, // Import DialogHeader
-  DialogTitle,   // Import DialogTitle
-  // DialogClose, // Explicit DialogClose from RoomClient is removed
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import SelectMediaModal from './SelectMediaModal';
+import { useToast } from "@/hooks/use-toast";
 
 
 interface RoomClientProps {
@@ -73,8 +72,12 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const placeholderContentRef = useRef<HTMLDivElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isSelectMediaModalOpen, setIsSelectMediaModalOpen] = useState(false);
+  const { toast } = useToast();
+  const screenStreamRef = useRef<MediaStream | null>(null);
+
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -96,6 +99,65 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       setChatInput('');
     }
   };
+
+  const stopScreenShare = () => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+      videoRef.current.classList.add('hidden');
+    }
+    if (placeholderContentRef.current) {
+      placeholderContentRef.current.classList.remove('hidden');
+    }
+  };
+
+  const handleShareScreen = async () => {
+    if (isSelectMediaModalOpen) {
+      setIsSelectMediaModalOpen(false);
+    }
+
+    // If a screen is already being shared, stop it first
+    if (screenStreamRef.current) {
+        stopScreenShare();
+        // Optionally, add a small delay or a confirmation before starting a new share
+        // For now, we'll just stop and proceed to share new screen
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true, 
+      });
+      screenStreamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(error => console.error("Error playing video:", error));
+        videoRef.current.classList.remove('hidden');
+      }
+      if (placeholderContentRef.current) {
+        placeholderContentRef.current.classList.add('hidden');
+      }
+
+      stream.getVideoTracks()[0].onended = () => {
+        stopScreenShare();
+      };
+    } catch (err: any) {
+      console.error("Error sharing screen:", err);
+      toast({
+        variant: "destructive",
+        title: "Screen Share Failed",
+        description: err.message || "Could not start screen sharing. Please ensure permission is granted.",
+      });
+      // Ensure UI is reset if screen sharing fails to start
+      if (videoRef.current) videoRef.current.classList.add('hidden');
+      if (placeholderContentRef.current) placeholderContentRef.current.classList.remove('hidden');
+    }
+  };
+
 
   return (
     <TooltipProvider>
@@ -175,8 +237,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           {/* Content Area */}
           <main className="flex-1 flex flex-col items-center justify-center p-4 relative bg-background">
             <div className="w-full max-w-4xl aspect-[16/7] bg-black/50 rounded-lg shadow-2xl flex flex-col items-center justify-center border border-border">
-              <video ref={videoRef} className="w-full h-full object-cover rounded-md hidden" autoPlay muted />
-              <div className="text-center p-8">
+              <video ref={videoRef} className="w-full h-full object-cover rounded-md hidden" autoPlay muted playsInline />
+              <div ref={placeholderContentRef} className="text-center p-8">
                 <h2 className="text-2xl font-semibold text-muted-foreground mb-4">Your virtual space is ready.</h2>
                 <Dialog open={isSelectMediaModalOpen} onOpenChange={setIsSelectMediaModalOpen}>
                   <DialogTrigger asChild>
@@ -188,7 +250,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     <DialogHeader className="sr-only">
                       <DialogTitle>Select Media</DialogTitle>
                     </DialogHeader>
-                    <SelectMediaModal />
+                    <SelectMediaModal onShareScreen={handleShareScreen} />
                   </DialogContent>
                 </Dialog>
                 <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>
@@ -245,7 +307,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" className="flex-1"><ScreenShare className="h-5 w-5" /></Button>
+                  <Button variant="outline" size="icon" className="flex-1" onClick={handleShareScreen}>
+                    <ScreenShare className="h-5 w-5" />
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent><p>Share Screen</p></TooltipContent>
               </Tooltip>
@@ -295,3 +359,4 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     </TooltipProvider>
   );
 }
+

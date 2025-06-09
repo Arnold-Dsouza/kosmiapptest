@@ -2,7 +2,7 @@
 "use client";
 
 import Image from 'next/image';
-import Link from 'next/link'; // Added for informational links
+import Link from 'next/link'; 
 import * as React from 'react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ArrowLeft, ChevronDown, MonitorPlay, Link2, Folder, Search, Compass, Tv, Gamepad2, Sparkles, Info, Gem, Youtube, Clapperboard, Globe, Puzzle, ScreenShare } from 'lucide-react';
 
 interface SelectMediaModalProps {
-  // Props can be added here if needed for interaction, e.g., onMediaSelect
+  onShareScreen?: () => void;
 }
 
 const categories = [
@@ -45,7 +45,7 @@ const mediaItemsData = [
 ];
 
 
-export default function SelectMediaModal({}: SelectMediaModalProps) {
+export default function SelectMediaModal({ onShareScreen }: SelectMediaModalProps) {
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0].id);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentView, setCurrentView] = useState<'main' | 'loadFile' | 'loadUrl'>('main');
@@ -70,7 +70,6 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
           <Button
             size="lg"
             className="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold mb-8 px-6 py-3 rounded-md"
-            // onClick handler for file input would be added here
           >
             Load a Video File...
           </Button>
@@ -138,7 +137,9 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
              <h2 className="text-xl md:text-2xl font-semibold mr-2 md:mr-4 text-foreground">Select</h2>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto"> <MonitorPlay className="h-5 w-5 md:h-6 md:w-6" /> </Button>
+                <Button variant="outline" size="lg" className="p-2 md:p-3 aspect-square h-auto" onClick={() => { if (onShareScreen) { onShareScreen(); } }}> 
+                  <MonitorPlay className="h-5 w-5 md:h-6 md:w-6" /> 
+                </Button>
               </TooltipTrigger>
               <TooltipContent><p>Share your screen or an application window</p></TooltipContent>
             </Tooltip>
@@ -219,3 +220,4 @@ export default function SelectMediaModal({}: SelectMediaModalProps) {
     </div>
   );
 }
+
