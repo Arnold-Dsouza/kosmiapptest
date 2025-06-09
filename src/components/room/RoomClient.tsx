@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Video,
-  ScreenShare,
   Users,
   Settings,
   MessageSquare,
@@ -85,6 +84,37 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const screenStreamRef = useRef<MediaStream | null>(null);
   const [currentMediaUrl, setCurrentMediaUrl] = useState<string | null>(null);
 
+  const stopMediaPlayback = useCallback(() => {
+    setCurrentMediaUrl(null);
+    if (mediaFrameRef.current) {
+      mediaFrameRef.current.src = 'about:blank'; // More robust way to stop iframe content
+      mediaFrameRef.current.classList.add('hidden');
+    }
+    if (placeholderContentRef.current && !screenStreamRef.current) {
+      placeholderContentRef.current.classList.remove('hidden');
+      if (videoRef.current) videoRef.current.classList.add('hidden'); // Ensure screen share video is hidden
+    }
+  }, []);
+
+  const stopScreenShare = useCallback(() => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+      videoRef.current.classList.add('hidden');
+    }
+
+    if (placeholderContentRef.current && !currentMediaUrl) {
+      placeholderContentRef.current.classList.remove('hidden');
+      if (mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden'); // Ensure media frame is hidden
+    } else if (mediaFrameRef.current && currentMediaUrl) {
+       mediaFrameRef.current.classList.remove('hidden');
+       if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden'); // Ensure placeholder is hidden
+    }
+  }, [currentMediaUrl]);
+
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -93,8 +123,16 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     if (typeof window !== "undefined") {
       setRoomLink(window.location.href);
     }
-    return () => clearTimeout(timer);
-  }, [roomId]);
+    
+    // Cleanup streams on component unmount
+    return () => {
+      clearTimeout(timer);
+      if (screenStreamRef.current) {
+        stopScreenShare();
+      }
+      // No explicit stopMediaPlayback here as it's usually tied to UI actions or screen share stopping
+    };
+  }, [roomId, stopScreenShare]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,33 +145,6 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         avatar: 'https://placehold.co/40x40.png?text=Me'
       }]);
       setChatInput('');
-    }
-  };
-
-  const stopMediaPlayback = () => {
-    setCurrentMediaUrl(null);
-    if (mediaFrameRef.current) {
-      mediaFrameRef.current.src = '';
-      mediaFrameRef.current.classList.add('hidden');
-    }
-    if (placeholderContentRef.current && !screenStreamRef.current) {
-      placeholderContentRef.current.classList.remove('hidden');
-    }
-  };
-  
-  const stopScreenShare = () => {
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-      screenStreamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-      videoRef.current.classList.add('hidden');
-    }
-    if (placeholderContentRef.current && !currentMediaUrl) {
-      placeholderContentRef.current.classList.remove('hidden');
-    } else if (mediaFrameRef.current && currentMediaUrl) {
-       mediaFrameRef.current.classList.remove('hidden');
     }
   };
 
@@ -170,18 +181,16 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         title: "Unsupported URL",
         description: "Only YouTube video URLs are supported for now.",
       });
-      // Optionally, try to embed directly or handle other URLs
-      // setCurrentMediaUrl(url); // For direct embedding attempt
     }
     setIsSelectMediaModalOpen(false);
   };
 
   const handleShareScreen = async () => {
     if (isSelectMediaModalOpen) setIsSelectMediaModalOpen(false);
-    if (currentMediaUrl) stopMediaPlayback(); // Stop any existing media playback
+    if (currentMediaUrl) stopMediaPlayback(); 
 
     if (screenStreamRef.current) {
-        stopScreenShare(); // If already sharing, stop it first (acts as a toggle)
+        stopScreenShare(); 
     }
 
     try {
@@ -211,8 +220,14 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         description: err.message || "Could not start screen sharing. Please ensure permission is granted.",
       });
       if (videoRef.current) videoRef.current.classList.add('hidden');
-      if (placeholderContentRef.current && !currentMediaUrl) placeholderContentRef.current.classList.remove('hidden');
-      else if (mediaFrameRef.current && currentMediaUrl) mediaFrameRef.current.classList.remove('hidden');
+      
+      if (currentMediaUrl && mediaFrameRef.current) {
+         mediaFrameRef.current.classList.remove('hidden');
+         if(placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
+      } else if (placeholderContentRef.current) {
+        placeholderContentRef.current.classList.remove('hidden');
+        if(mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden');
+      }
     }
   };
 
@@ -318,7 +333,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               <video ref={videoRef} className="w-full h-full object-contain rounded-md hidden" autoPlay muted playsInline />
               <iframe 
                 ref={mediaFrameRef} 
-                className="w-full h-full border-0 hidden" // Initially hidden
+                className="w-full h-full border-0 hidden" 
                 allow="autoplay; encrypted-media; picture-in-picture"
                 allowFullScreen
                 title="Media Content"
@@ -331,7 +346,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                       <PlaySquare className="h-6 w-6 mr-2" /> Select Media
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl w-[95vw] md:w-[90vw] h-auto md:h-[90vh] p-0 border-0 bg-transparent shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none">
+                  <DialogContent 
+                    className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl w-[95vw] md:w-[90vw] h-auto md:h-[90vh] p-0 border-0 bg-transparent shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
+                    onOpenAutoFocus={(e) => e.preventDefault()} // Prevent autofocus on internal elements
+                    >
                      <DialogHeader className="sr-only">
                         <DialogTitle>Select Media</DialogTitle>
                         <DialogDescription>Choose content to share in the room.</DialogDescription>
@@ -476,4 +494,3 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     </TooltipProvider>
   );
 }
-
