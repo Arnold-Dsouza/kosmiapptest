@@ -26,6 +26,7 @@ import {
   Bell,
   PlusCircle,
   Globe,
+  Copy,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -42,6 +43,8 @@ import {
   DialogTrigger,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogClose,
 } from "@/components/ui/dialog";
 import SelectMediaModal from './SelectMediaModal';
 import { useToast } from "@/hooks/use-toast";
@@ -75,6 +78,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const placeholderContentRef = useRef<HTMLDivElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isSelectMediaModalOpen, setIsSelectMediaModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [roomLink, setRoomLink] = useState('');
   const { toast } = useToast();
   const screenStreamRef = useRef<MediaStream | null>(null);
 
@@ -83,6 +88,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     const timer = setTimeout(() => {
       setMessages(prev => [...prev, {id: Date.now().toString(), user: "System", text: `Welcome to room ${roomId}! This is a new design.`, timestamp: new Date()}]);
     }, 1000);
+    // Set room link on client side
+    if (typeof window !== "undefined") {
+      setRoomLink(window.location.href);
+    }
     return () => clearTimeout(timer);
   }, [roomId]);
 
@@ -119,11 +128,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       setIsSelectMediaModalOpen(false);
     }
 
-    // If a screen is already being shared, stop it first
     if (screenStreamRef.current) {
         stopScreenShare();
-        // Optionally, add a small delay or a confirmation before starting a new share
-        // For now, we'll just stop and proceed to share new screen
     }
 
     try {
@@ -152,9 +158,28 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         title: "Screen Share Failed",
         description: err.message || "Could not start screen sharing. Please ensure permission is granted.",
       });
-      // Ensure UI is reset if screen sharing fails to start
       if (videoRef.current) videoRef.current.classList.add('hidden');
       if (placeholderContentRef.current) placeholderContentRef.current.classList.remove('hidden');
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (roomLink) {
+      navigator.clipboard.writeText(roomLink)
+        .then(() => {
+          toast({
+            title: "Link Copied!",
+            description: "Room link copied to clipboard.",
+          });
+        })
+        .catch(err => {
+          console.error("Failed to copy link: ", err);
+          toast({
+            variant: "destructive",
+            title: "Copy Failed",
+            description: "Could not copy link to clipboard.",
+          });
+        });
     }
   };
 
@@ -247,9 +272,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl w-[95vw] md:w-[90vw] h-auto md:h-[90vh] p-0 border-0 bg-transparent shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none">
-                    <DialogHeader className="sr-only">
-                      <DialogTitle>Select Media</DialogTitle>
-                    </DialogHeader>
+                     <DialogHeader className="sr-only">
+                        <DialogTitle>Select Media</DialogTitle>
+                        <DialogDescription>Choose content to share in the room.</DialogDescription>
+                      </DialogHeader>
                     <SelectMediaModal onShareScreen={handleShareScreen} />
                   </DialogContent>
                 </Dialog>
@@ -285,9 +311,40 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 <TooltipContent><p>Room Settings</p></TooltipContent>
               </Tooltip>
             </h2>
-            <Button className="w-full mb-3 bg-primary/90 hover:bg-primary">
-              <UserPlus className="h-5 w-5 mr-2" /> Invite Friends
-            </Button>
+
+            <Dialog open={isInviteModalOpen} onOpenChange={setIsInviteModalOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full mb-3 bg-primary/90 hover:bg-primary">
+                  <UserPlus className="h-5 w-5 mr-2" /> Invite Friends
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Invite to room</DialogTitle>
+                </DialogHeader>
+                <div className="py-2 space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Share this room link for others to join:
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      id="roomLink"
+                      value={roomLink}
+                      readOnly
+                      className="flex-1"
+                    />
+                    <Button onClick={handleCopyLink} size="sm" className="px-3 bg-primary hover:bg-primary/80">
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy link
+                    </Button>
+                  </div>
+                   <p className="text-sm text-muted-foreground">
+                    Paste the link into any email or messaging app message.
+                  </p>
+                </div>
+              </DialogContent>
+            </Dialog>
+            
             <div className="flex items-center justify-around gap-2">
                <Tooltip>
                 <TooltipTrigger asChild>
@@ -359,4 +416,3 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     </TooltipProvider>
   );
 }
-
