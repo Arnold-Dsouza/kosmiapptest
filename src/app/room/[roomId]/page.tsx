@@ -2,17 +2,18 @@ import RoomClient from '@/components/room/RoomClient';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-type Props = {
-  params: { roomId: string };
-};
+// The Props type alias is removed.
+// type Props = {
+//   params: { roomId: string };
+// };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: { roomId: string } }): Promise<Metadata> {
   return {
     title: `Room: ${params.roomId} | Virtual Hub`,
   };
 }
 
-export default function RoomPage({ params }: Props) {
+export default function RoomPage({ params }: { params: { roomId: string } }) {
   // Basic validation or redirect if roomId is something like "new-room" (though this specific path might be handled differently)
   if (!params.roomId || params.roomId === "undefined") {
     return (
