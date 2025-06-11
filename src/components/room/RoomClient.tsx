@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -7,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { cn } from "@/lib/utils";
 import {
   Video,
   Users,
@@ -37,15 +37,18 @@ import {
   Captions, // CC icon
   Expand,   // Fullscreen icon
   Youtube, // YouTube icon
+  Crown,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
+  
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
@@ -59,6 +62,8 @@ import {
 import SelectMediaModal from './SelectMediaModal';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
+import { db } from '@/lib/firebase';
+import { collection, doc, onSnapshot, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
 
 
 interface RoomClientProps {
@@ -81,28 +86,11 @@ interface Participant {
   isHost: boolean;
 }
 
-const currentUser: Participant = {
-  id: 'currentUserHost',
-  name: 'You', // This will be used in tooltips or lists, display name under avatar is "Host"
-  avatarUrl: 'https://placehold.co/80x80.png?text=Me',
-  hint: 'person avatar host',
-  isHost: true,
-};
-
-const remoteParticipants: Participant[] = [
-  { id: '1', name: 'Alex', avatarUrl: 'https://placehold.co/80x80.png?text=A' , hint: 'person avatar', isHost: false },
-  { id: '2', name: 'Sam', avatarUrl: 'https://placehold.co/80x80.png?text=S' , hint: 'person avatar', isHost: false },
-  { id: '3', name: 'Casey', avatarUrl: 'https://placehold.co/80x80.png?text=C' , hint: 'person avatar', isHost: false },
-];
-
-const allParticipants: Participant[] = [currentUser, ...remoteParticipants];
-
-
 export default function RoomClient({ roomId }: RoomClientProps) {
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isMicOn, setIsMicOn] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaFrameRef = useRef<HTMLIFrameElement>(null);
@@ -116,6 +104,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   
   const screenStreamRef = useRef<MediaStream | null>(null);
   const [currentMediaUrl, setCurrentMediaUrl] = useState<string | null>(null);
+  const [isYouTubeVideo, setIsYouTubeVideo] = useState(false);
+  const [isSeeking, setIsSeeking] = useState(false);
 
   const [isScreenSharePlaying, setIsScreenSharePlaying] = useState(false);
   const [isScreenShareMuted, setIsScreenShareMuted] = useState(false);
@@ -127,8 +117,36 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [videoProgress, setVideoProgress] = useState(0);
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState("00:00");
   const [durationDisplay, setDurationDisplay] = useState("00:00");
-  const [isYouTubeVideo, setIsYouTubeVideo] = useState(false);
-  const [isSeeking, setIsSeeking] = useState(false);
+
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
+
+  const [allParticipants, setAllParticipants] = useState<Participant[]>([]);
+  const [userName, setUserName] = useState('');
+  const [isNamePromptOpen, setIsNamePromptOpen] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [isHost, setIsHost] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Add new state for media sync
+  const [mediaState, setMediaState] = useState<{
+    url: string | null;
+    isYouTube: boolean;
+    sourceText: string | null;
+    isPlaying: boolean;
+    currentTime: number;
+    duration: number;
+  }>({
+    url: null,
+    isYouTube: false,
+    sourceText: null,
+    isPlaying: false,
+    currentTime: 0,
+    duration: 0
+  });
 
   const formatTime = (timeInSeconds: number): string => {
     if (isNaN(timeInSeconds) || !isFinite(timeInSeconds)) return "00:00";
@@ -146,7 +164,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     return `${paddedMinutes}:${paddedSeconds}`;
   };
 
-  const stopMediaPlayback = useCallback(() => {
+  const stopMediaPlayback = useCallback(async () => {
     setCurrentMediaUrl(null);
     setIsYouTubeVideo(false);
     if (mediaFrameRef.current) {
@@ -161,7 +179,20 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     setVideoProgress(0);
     setCurrentTimeDisplay("00:00");
     setDurationDisplay("00:00");
-  }, []);
+
+    // Update Firebase state if host
+    if (isHost) {
+      const mediaStateRef = doc(db, 'rooms', roomId, 'media', 'state');
+      await setDoc(mediaStateRef, {
+        url: null,
+        isYouTube: false,
+        sourceText: null,
+        isPlaying: false,
+        currentTime: 0,
+        duration: 0
+      });
+    }
+  }, [isHost, roomId]);
 
   const stopScreenShare = useCallback(() => {
     if (screenStreamRef.current) {
@@ -250,32 +281,106 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setMessages(prev => [...prev, {id: Date.now().toString(), user: "System", avatar: 'https://placehold.co/40x40.png?text=S', text: `Welcome to room ${roomId}!`, timestamp: new Date()}]);
-    }, 1000);
     if (typeof window !== "undefined") {
       setRoomLink(window.location.href);
     }
     
     return () => {
-      clearTimeout(timer);
       if (screenStreamRef.current) {
         stopScreenShare();
       }
     };
   }, [roomId, stopScreenShare]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (messages.length > 1 && messages[messages.length - 1].user !== 'System') {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.text.includes('joined the room')) {
+        toast({
+          title: 'New Participant',
+          description: `${lastMsg.user} has joined the room!`,
+        });
+      }
+    }
+  }, [messages, toast]);
+
+  // Add current user to the room's participants list
+  useEffect(() => {
+    if (!userName) return;
+    
+    const userRef = doc(db, 'rooms', roomId, 'participants', `${userName}_${isHost ? 'host' : 'guest'}_${roomId}`);
+    const userData = {
+      id: `${userName}_${isHost ? 'host' : 'guest'}_${roomId}`,
+      name: userName,
+      avatarUrl: `https://placehold.co/80x80.png?text=${userName.charAt(0).toUpperCase()}`,
+      hint: 'person avatar',
+      isHost: isHost
+    };
+    setDoc(userRef, userData);
+
+    // Listen for changes to the participants list
+    const unsub = onSnapshot(collection(db, 'rooms', roomId, 'participants'), (snapshot) => {
+      const participants = snapshot.docs.map(doc => doc.data() as Participant);
+      setAllParticipants(participants);
+    });
+
+    // Remove user from participants list on unmount
+    return () => {
+      deleteDoc(userRef);
+      unsub();
+    };
+  }, [roomId, userName, isHost]);
+
+  // Add useEffect for real-time message updates
+  useEffect(() => {
+    if (!roomId) return;
+
+    // Listen for messages in real-time
+    const messagesRef = collection(db, 'rooms', roomId, 'messages');
+    const unsub = onSnapshot(messagesRef, (snapshot) => {
+      const newMessages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp?.toDate() || new Date()
+      })) as Message[];
+      
+      // Sort messages by timestamp
+      newMessages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      setMessages(newMessages);
+    });
+
+    return () => unsub();
+  }, [roomId]);
+
+  // Add auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (chatInput.trim()) {
-      setMessages([...messages, {
-        id: Date.now().toString(),
-        user: currentUser.name,
+    if (!chatInput.trim() || !userName) return;
+
+    try {
+      const messageRef = doc(collection(db, 'rooms', roomId, 'messages'));
+      const userAvatar = `https://placehold.co/40x40.png?text=${userName.charAt(0).toUpperCase()}`;
+      
+      await setDoc(messageRef, {
+        id: messageRef.id,
+        user: userName,
         text: chatInput.trim(),
         timestamp: new Date(),
-        avatar: currentUser.avatarUrl
-      }]);
+        avatar: userAvatar
+      });
+
       setChatInput('');
+    } catch (error) {
+      console.error("Error sending message:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+      });
     }
   };
 
@@ -283,18 +388,209 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     if (match && match[2].length === 11) {
-      return `https://www.youtube.com/embed/${match[2]}?autoplay=1&controls=1&rel=0&showinfo=0&modestbranding=1`;
+      return `https://www.youtube.com/embed/${match[2]}?autoplay=1&controls=1&rel=0&showinfo=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}&playsinline=1&fs=1`;
     }
     return null;
   };
 
- const handlePlayUrl = (url: string) => {
+  // Update useEffect for media sync to handle controls
+  useEffect(() => {
+    if (!roomId) return;
+
+    const mediaStateRef = doc(db, 'rooms', roomId, 'media', 'state');
+    const unsub = onSnapshot(mediaStateRef, (doc) => {
+      const data = doc.data();
+      if (data) {
+        // Update local state
+        setMediaState({
+          url: data.url,
+          isYouTube: data.isYouTube,
+          sourceText: data.sourceText,
+          isPlaying: data.isPlaying || false,
+          currentTime: data.currentTime || 0,
+          duration: data.duration || 0
+        });
+
+        // Update UI based on media state
+        if (data.url) {
+          if (data.isYouTube && mediaFrameRef.current) {
+            const iframe = mediaFrameRef.current;
+            // Set the source first
+            if (iframe.src !== data.url) {
+              iframe.src = data.url;
+            }
+            iframe.classList.remove('hidden');
+            if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
+            if (videoRef.current) videoRef.current.classList.add('hidden');
+            setCurrentMediaUrl(data.url);
+            setIsYouTubeVideo(true);
+            setMediaSourceText(data.sourceText);
+
+            // Then handle controls
+            if (data.isPlaying) {
+              iframe.contentWindow?.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'playVideo',
+                args: ''
+              }), { targetOrigin: '*' });
+            } else {
+              iframe.contentWindow?.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'pauseVideo',
+                args: ''
+              }), { targetOrigin: '*' });
+            }
+            if (data.currentTime) {
+              iframe.contentWindow?.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'seekTo',
+                args: [data.currentTime, true]
+              }), { targetOrigin: '*' });
+            }
+          } else if (videoRef.current) {
+            // For regular video elements
+            videoRef.current.src = data.url;
+            videoRef.current.classList.remove('hidden');
+            if (mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden');
+            if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
+            setCurrentMediaUrl(data.url);
+            setIsYouTubeVideo(false);
+            setMediaSourceText(data.sourceText);
+
+            // Handle controls
+            if (data.isPlaying) {
+              videoRef.current.play().catch(console.error);
+            } else {
+              videoRef.current.pause();
+            }
+            if (data.currentTime) {
+              videoRef.current.currentTime = data.currentTime;
+            }
+          }
+        } else {
+          stopMediaPlayback();
+        }
+      }
+    });
+
+    return () => unsub();
+  }, [roomId]);
+
+  // Add YouTube iframe API ready handler
+  useEffect(() => {
+    const handleYouTubeMessage = (event: MessageEvent) => {
+      if (event.data && typeof event.data === 'string') {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.event === 'onStateChange') {
+            // Update local state when YouTube player state changes
+            const isPlaying = data.info === 1; // 1 is playing, 2 is paused
+            if (isHost) {
+              const mediaStateRef = doc(db, 'rooms', roomId, 'media', 'state');
+              setDoc(mediaStateRef, {
+                ...mediaState,
+                isPlaying
+              }, { merge: true });
+            }
+          } else if (data.event === 'onReady') {
+            // When the iframe is ready, sync with the current state
+            if (mediaState.isPlaying) {
+              event.source?.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'playVideo',
+                args: ''
+              }), { targetOrigin: '*' });
+            }
+            if (mediaState.currentTime) {
+              event.source?.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'seekTo',
+                args: [mediaState.currentTime, true]
+              }), { targetOrigin: '*' });
+            }
+          }
+        } catch (e) {
+          // Not a JSON message
+        }
+      }
+    };
+
+    window.addEventListener('message', handleYouTubeMessage);
+    return () => window.removeEventListener('message', handleYouTubeMessage);
+  }, [isHost, roomId, mediaState]);
+
+  // Add video control handlers
+  const handlePlayPause = async () => {
+    if (!isHost) return; // Only host can control playback
+
+    const newIsPlaying = !mediaState.isPlaying;
+    
+    // Update local state first for immediate feedback
+    if (isYouTubeVideo && mediaFrameRef.current) {
+      const iframe = mediaFrameRef.current;
+      if (newIsPlaying) {
+        iframe.contentWindow?.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'playVideo',
+          args: ''
+        }), { targetOrigin: '*' });
+      } else {
+        iframe.contentWindow?.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'pauseVideo',
+          args: ''
+        }), { targetOrigin: '*' });
+      }
+    } else if (videoRef.current) {
+      if (newIsPlaying) {
+        videoRef.current.play().catch(console.error);
+      } else {
+        videoRef.current.pause();
+      }
+    }
+
+    // Update local state
+    setMediaState(prev => ({
+      ...prev,
+      isPlaying: newIsPlaying
+    }));
+
+    // Then sync to Firebase
+    const mediaStateRef = doc(db, 'rooms', roomId, 'media', 'state');
+    await setDoc(mediaStateRef, {
+      ...mediaState,
+      isPlaying: newIsPlaying
+    }, { merge: true });
+  };
+
+  // Single handleProgressChange function with sync functionality
+  const handleProgressChange = async (value: number[]) => {
+    if (!isHost) return; // Only host can control seeking
+    
+    if (videoRef.current && screenStreamRef.current && isFinite(videoRef.current.duration)) {
+      const newTime = (value[0] / 100) * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setCurrentTimeDisplay(formatTime(newTime));
+      setVideoProgress(value[0]);
+      
+      // Sync seek position
+      const mediaStateRef = doc(db, 'rooms', roomId, 'media', 'state');
+      await setDoc(mediaStateRef, {
+        ...mediaState,
+        currentTime: newTime
+      }, { merge: true });
+    }
+  };
+
+  // Update handlePlayUrl to include initial control state
+  const handlePlayUrl = async (url: string) => {
     if (screenStreamRef.current) {
       stopScreenShare();
     }
     
     const embedUrl = getYouTubeEmbedUrl(url);
     if (embedUrl) {
+      // Update local state
       setCurrentMediaUrl(embedUrl);
       setIsYouTubeVideo(true);
       if (mediaFrameRef.current) {
@@ -304,12 +600,23 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
       if (videoRef.current) videoRef.current.classList.add('hidden');
       setMediaSourceText("youtube.com");
+
+      // Update Firebase state if host
+      if (isHost) {
+        const mediaStateRef = doc(db, 'rooms', roomId, 'media', 'state');
+        await setDoc(mediaStateRef, {
+          url: embedUrl,
+          isYouTube: true,
+          sourceText: "youtube.com",
+          isPlaying: true,
+          currentTime: 0,
+          duration: 0
+        });
+      }
     } else {
-      // For now, only YouTube is "officially" supported with special handling.
-      // You could attempt to load other URLs directly, but X-Frame-Options might prevent it.
-      // Basic attempt:
+      // For non-YouTube URLs
       setCurrentMediaUrl(url);
-      setIsYouTubeVideo(false); // Not a YouTube video
+      setIsYouTubeVideo(false);
       if (mediaFrameRef.current) {
         mediaFrameRef.current.src = url;
         mediaFrameRef.current.classList.remove('hidden');
@@ -319,14 +626,35 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       try {
         const hostname = new URL(url).hostname;
         setMediaSourceText(hostname);
+        
+        // Update Firebase state if host
+        if (isHost) {
+          const mediaStateRef = doc(db, 'rooms', roomId, 'media', 'state');
+          await setDoc(mediaStateRef, {
+            url: url,
+            isYouTube: false,
+            sourceText: hostname,
+            isPlaying: true,
+            currentTime: 0,
+            duration: 0
+          });
+        }
       } catch (e) {
         setMediaSourceText("External Link");
+        
+        // Update Firebase state if host
+        if (isHost) {
+          const mediaStateRef = doc(db, 'rooms', roomId, 'media', 'state');
+          await setDoc(mediaStateRef, {
+            url: url,
+            isYouTube: false,
+            sourceText: "External Link",
+            isPlaying: true,
+            currentTime: 0,
+            duration: 0
+          });
+        }
       }
-      // toast({
-      //   variant: "destructive",
-      //   title: "Unsupported URL",
-      //   description: "Only YouTube video URLs are fully supported for now. Other URLs might not embed correctly.",
-      // });
     }
     setIsSelectMediaModalOpen(false);
   };
@@ -462,20 +790,188 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       document.exitFullscreen();
     }
   };
-  
-  const handleProgressChange = (value: number[]) => {
-    if (videoRef.current && screenStreamRef.current && isFinite(videoRef.current.duration)) {
-      const newTime = (value[0] / 100) * videoRef.current.duration;
-      videoRef.current.currentTime = newTime;
-      setCurrentTimeDisplay(formatTime(newTime)); // Immediate update for responsiveness
-      setVideoProgress(value[0]);
-    }
-  };
-
 
   const isMediaActive = !!(currentMediaUrl || screenStreamRef.current);
   const isScreenShareActive = !!screenStreamRef.current;
 
+  // Check if user is the first participant and set up initial state
+  useEffect(() => {
+    const checkFirstParticipant = async () => {
+      const participantsRef = collection(db, 'rooms', roomId, 'participants');
+      const snapshot = await getDocs(participantsRef);
+      
+      if (snapshot.empty) {
+        // This is the first participant (room creator)
+        setIsHost(true);
+        const defaultName = 'Host';
+        setUserName(defaultName);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('vh_userName', defaultName);
+        }
+      } else {
+        // This is a joining participant
+        const storedName = typeof window !== 'undefined' ? localStorage.getItem('vh_userName') : '';
+        if (storedName) {
+          setUserName(storedName);
+        } else {
+          setIsNamePromptOpen(true);
+        }
+      }
+    };
+    
+    checkFirstParticipant();
+  }, [roomId]);
+
+  // Handle name submit
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (nameInput.trim()) {
+      setUserName(nameInput.trim());
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('vh_userName', nameInput.trim());
+      }
+      setIsNamePromptOpen(false);
+    }
+  };
+
+  // Add new function to handle appointing host
+  const handleAppointHost = async (participantId: string) => {
+    try {
+      // Update the new host
+      const newHostRef = doc(db, 'rooms', roomId, 'participants', participantId);
+      await setDoc(newHostRef, { isHost: true }, { merge: true });
+
+      // Update the current host to not be host
+      const currentHostRef = doc(db, 'rooms', roomId, 'participants', `${userName}_${isHost ? 'host' : 'guest'}_${roomId}`);
+      await setDoc(currentHostRef, { isHost: false }, { merge: true });
+
+      // Update local state
+      setIsHost(false);
+      
+      toast({
+        title: "Host Changed",
+        description: "The room host has been updated.",
+      });
+    } catch (error) {
+      console.error("Error appointing host:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to appoint new host.",
+      });
+    }
+  };
+
+  // Add new function to handle kicking participants
+  const handleKickParticipant = async (participantId: string) => {
+    try {
+      const participantRef = doc(db, 'rooms', roomId, 'participants', participantId);
+      await deleteDoc(participantRef);
+      
+      toast({
+        title: "Participant Removed",
+        description: "The participant has been removed from the room.",
+      });
+    } catch (error) {
+      console.error("Error kicking participant:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to remove participant.",
+      });
+    }
+  };
+
+  // Replace the camera/mic initialization useEffect with this new one
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+
+    const initializeMedia = async () => {
+      try {
+        // Only request media if either camera or mic is enabled
+        if (isCameraOn || isMicOn) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: isCameraOn,
+            audio: isMicOn
+          });
+          
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
+          setLocalStream(stream);
+        }
+      } catch (err) {
+        console.error("Error accessing media devices:", err);
+        toast({
+          variant: "destructive",
+          title: "Media Access Error",
+          description: "Could not access camera or microphone. Please check permissions.",
+        });
+        // Reset states if permission denied
+        setIsCameraOn(false);
+        setIsMicOn(false);
+      }
+    };
+
+    initializeMedia();
+
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [isCameraOn, isMicOn]); // Re-run when camera or mic state changes
+
+  // Add handlers for camera and mic toggles
+  const handleCameraToggle = async () => {
+    if (!isCameraOn && !localStream) {
+      // If turning on camera and no stream exists, request permissions
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: isMicOn
+        });
+        setLocalStream(stream);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+      } catch (err) {
+        console.error("Error accessing camera:", err);
+        toast({
+          variant: "destructive",
+          title: "Camera Access Error",
+          description: "Could not access camera. Please check permissions.",
+        });
+        return;
+      }
+    }
+    setIsCameraOn(!isCameraOn);
+  };
+
+  const handleMicToggle = async () => {
+    if (!isMicOn && !localStream) {
+      // If turning on mic and no stream exists, request permissions
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: isCameraOn,
+          audio: true
+        });
+        setLocalStream(stream);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+      } catch (err) {
+        console.error("Error accessing microphone:", err);
+        toast({
+          variant: "destructive",
+          title: "Microphone Access Error",
+          description: "Could not access microphone. Please check permissions.",
+        });
+        return;
+      }
+    }
+    setIsMicOn(!isMicOn);
+  };
 
   return (
     <TooltipProvider>
@@ -515,13 +1011,13 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="text-lg font-semibold hover:bg-primary/10">
-                  {roomId}'s room
+                  {roomId.split(/[-']/)[0]}'s room
                   <ChevronDown className="h-5 w-5 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuItem>Room Settings</DropdownMenuItem>
-                <DropdownMenuItem>Change Room Name</DropdownMenuItem>
+                <DropdownMenuItem>Room ID - {roomId}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -534,7 +1030,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon"><Users className="h-5 w-5" /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => setIsParticipantsOpen(true)}>
+                    <Users className="h-5 w-5" />
+                    <span className="sr-only">Show Participants</span>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent><p>Participants ({allParticipants.length})</p></TooltipContent>
               </Tooltip>
@@ -544,9 +1043,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </TooltipTrigger>
                 <TooltipContent><p>Fullscreen</p></TooltipContent>
               </Tooltip>
-              <Button variant="ghost" size="sm" asChild>
+              <Button variant="ghost" size="sm" asChild className="group text-destructive hover:bg-destructive/10 hover:text-destructive">
                 <Link href="/">
-                  <LogOut className="h-4 w-4 mr-1 md:mr-2" /> <span className="hidden md:inline">Leave</span>
+                  <LogOut className="h-4 w-4 mr-1 md:mr-2 group-hover:text-destructive" /> <span className="hidden md:inline group-hover:text-destructive">Leave</span>
                 </Link>
               </Button>
             </div>
@@ -565,9 +1064,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               ></iframe>
               <div ref={placeholderContentRef} className="text-center p-8">
                 <h2 className="text-2xl font-semibold text-muted-foreground mb-4">Your virtual space is ready.</h2>
+                {isHost && (
                  <Button size="lg" className="bg-primary hover:bg-primary/80" onClick={() => setIsSelectMediaModalOpen(true)}>
                     <PlaySquare className="h-6 w-6 mr-2" /> Select Media
                  </Button>
+                )}
                 <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>
               </div>
             </div>
@@ -578,6 +1079,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 {/* Progress Bar and Time */}
                 <div className="flex items-center gap-2 px-1">
                   <span className="text-xs text-white w-12 text-center">{currentTimeDisplay}</span>
+                  {isHost && (
                   <Slider
                     value={[videoProgress]}
                     max={100}
@@ -594,6 +1096,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     )}
                     disabled={!isScreenShareActive || !isFinite(videoRef.current?.duration ?? 0)}
                   />
+                  )}
                   <span className="text-xs text-white w-12 text-center">{durationDisplay}</span>
                 </div>
                  {/* Media Source Text */}
@@ -602,6 +1105,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 {/* Control Buttons */}
                 <div className="flex justify-between items-center gap-2">
                   <div className="flex items-center gap-1.5">
+                    {isHost && (
+                      <>
                     <Tooltip>
                       <TooltipTrigger asChild>
                          <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={() => setIsSelectMediaModalOpen(true)}>
@@ -620,11 +1125,17 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={toggleScreenSharePlayPause} disabled={!isScreenShareActive}>
-                          {isScreenSharePlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                            <Button 
+                              variant="default" 
+                              size="icon" 
+                              className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" 
+                              onClick={handlePlayPause} 
+                              disabled={!currentMediaUrl}
+                            >
+                              {mediaState.isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent><p>{isScreenSharePlaying ? "Pause" : "Play"}</p></TooltipContent>
+                          <TooltipContent><p>{mediaState.isPlaying ? "Pause" : "Play"}</p></TooltipContent>
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -648,6 +1159,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                         )}
                         disabled={!isScreenShareActive || isScreenShareMuted}
                       />
+                      </>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {isYouTubeVideo && <Youtube className="h-5 w-5 text-red-500 hidden md:inline" />}
@@ -683,22 +1196,42 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             
             {/* Participant Avatars */}
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-4/5 md:max-w-3/4 lg:max-w-1/2 h-auto pb-1 pt-2 px-4 bg-muted/30 rounded-t-xl flex justify-center items-end space-x-2 md:space-x-3 shadow-xl backdrop-blur-sm">
-              {allParticipants.map(user => (
-                <div key={user.id} className="flex flex-col items-center text-center">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Avatar className={`h-12 w-12 md:h-16 md:w-16 border-2 ${user.isHost ? 'border-accent ring-4 ring-accent/50' : 'border-primary ring-2 ring-primary/50'} mb-0.5 hover:scale-110 transition-transform cursor-pointer`}>
-                        <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint={user.hint} />
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                    </TooltipTrigger>
-                    <TooltipContent><p>{user.isHost ? `${user.name} (Host)` : user.name}</p></TooltipContent>
-                  </Tooltip>
-                  <span className={`text-xs max-w-[60px] truncate ${user.isHost ? 'font-semibold text-accent' : 'text-muted-foreground'}`}>
-                    {user.isHost ? 'Host' : user.name}
-                  </span>
-                </div>
-              ))}
+              {allParticipants.map(user => {
+                const isCurrentUser = user.id === `${userName}_${isHost ? 'host' : 'guest'}_${roomId}`;
+                return (
+                  <div key={user.id} className="flex flex-col items-center text-center">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="relative">
+                          {isCurrentUser && isCameraOn ? (
+                            <div className={`h-12 w-12 md:h-16 md:w-16 rounded-full overflow-hidden border-2 ${isHost ? 'border-accent ring-4 ring-accent/50' : 'border-primary ring-2 ring-primary/50'} mb-0.5 hover:scale-110 transition-transform cursor-pointer`}>
+                              <video
+                                ref={localVideoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <Avatar className={`h-12 w-12 md:h-16 md:w-16 border-2 ${user.isHost ? 'border-accent ring-4 ring-accent/50' : 'border-primary ring-2 ring-primary/50'} mb-0.5 hover:scale-110 transition-transform cursor-pointer`}>
+                              <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint={user.hint} />
+                              <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                          )}
+                          {user.isHost && (
+                            <span className="absolute -top-2 -right-2">
+                              <Crown className="h-5 w-5 text-yellow-400 drop-shadow" />
+                            </span>
+                          )}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent><p>{user.isHost ? `${user.name} (Host)` : user.name}</p></TooltipContent>
+                    </Tooltip>
+                    <span className={`text-xs max-w-[60px] truncate ${user.isHost ? 'font-semibold text-accent' : 'text-muted-foreground'}`}>{user.name}</span>
+                  </div>
+                );
+              })}
             </div>
           </main>
         </div>
@@ -753,9 +1286,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                <Tooltip>
                 <TooltipTrigger asChild>
                    <Button 
-                    onClick={() => setIsMicOn(!isMicOn)}
+                    onClick={handleMicToggle}
                     className="flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground shadow-md active:shadow-inner active:translate-y-px border-b-4 border-muted"
                     size="icon"
+                    suppressHydrationWarning
                   >
                     {isMicOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5 text-destructive" />}
                   </Button>
@@ -765,9 +1299,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
-                    onClick={() => setIsCameraOn(!isCameraOn)}
+                    onClick={handleCameraToggle}
                     className="flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground shadow-md active:shadow-inner active:translate-y-px border-b-4 border-muted"
                     size="icon"
+                    suppressHydrationWarning
                   >
                     {isCameraOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5 text-destructive" />}
                   </Button>
@@ -781,27 +1316,42 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           </div>
 
           <ScrollArea className="flex-grow p-3 pr-2">
-            {messages.map((msg) => (
-              <div key={msg.id} className={`flex gap-2 mb-3 ${msg.user === currentUser.name ? 'justify-end' : ''}`}>
-                {msg.user !== currentUser.name && (
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={msg.avatar || `https://placehold.co/40x40.png?text=${msg.user.charAt(0)}`} alt={msg.user} data-ai-hint="user avatar" />
-                    <AvatarFallback>{msg.user.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                )}
-                <div className={`max-w-[75%] p-2 rounded-lg shadow-sm ${msg.user === currentUser.name ? 'bg-primary text-primary-foreground' : 'bg-secondary'}`}>
-                  <p className="text-xs font-semibold mb-0.5">{msg.user === 'System' ? 'System Notice' : msg.user}</p>
-                  <p className="text-sm">{msg.text}</p>
-                  <p className="text-xs text-muted-foreground/80 mt-1 text-right">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+            {messages.map((msg) => {
+              const isCurrentUser = msg.user === userName;
+              const isSystemMessage = msg.user === "System";
+              return (
+                <div key={msg.id} className={`flex gap-2 mb-3 ${isCurrentUser ? 'justify-end' : ''}`}>
+                  {!isCurrentUser && !isSystemMessage && (
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={msg.avatar || `https://placehold.co/40x40.png?text=${msg.user.charAt(0)}`} alt={msg.user} data-ai-hint="user avatar" />
+                      <AvatarFallback>{msg.user.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                  )}
+                  <div className={`max-w-[75%] p-2 rounded-lg shadow-sm ${
+                    isSystemMessage 
+                      ? 'bg-muted/50 text-muted-foreground mx-auto' 
+                      : isCurrentUser 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'bg-secondary'
+                  }`}>
+                    {!isSystemMessage && (
+                      <p className="text-xs font-semibold mb-0.5">{msg.user}</p>
+                    )}
+                    <p className="text-sm">{msg.text}</p>
+                    <p className="text-xs text-muted-foreground/80 mt-1 text-right">
+                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  {isCurrentUser && (
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={msg.avatar} alt={msg.user} data-ai-hint="user avatar host" />
+                      <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                  )}
                 </div>
-                 {msg.user === currentUser.name && (
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={msg.avatar} alt={msg.user} data-ai-hint="user avatar host" />
-                    <AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                )}
-              </div>
-            ))}
+              );
+            })}
+            <div ref={messagesEndRef} />
           </ScrollArea>
           <form onSubmit={handleSendMessage} className="p-3 border-t border-border flex gap-2 bg-card">
             <Input
@@ -810,8 +1360,15 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               className="flex-grow bg-background focus:ring-primary"
+              suppressHydrationWarning
             />
-            <Button type="submit" size="icon" aria-label="Send message" className="bg-primary hover:bg-primary/80">
+            <Button 
+              type="submit" 
+              size="icon" 
+              aria-label="Send message" 
+              className="bg-primary hover:bg-primary/80"
+              suppressHydrationWarning
+            >
               <Send className="h-5 w-5" />
             </Button>
           </form>
@@ -833,6 +1390,83 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               />
             </DialogContent>
           </Dialog>
+
+        {/* Participants Dialog */}
+        <Dialog open={isParticipantsOpen} onOpenChange={setIsParticipantsOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Participants ({allParticipants.length})</DialogTitle>
+            </DialogHeader>
+            <ul className="space-y-2">
+              {allParticipants.map((user) => (
+                <li key={user.id} className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={user.avatarUrl} alt={user.name} />
+                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      {user.isHost && (
+                        <span className="absolute -top-1 -right-1 bg-transparent">
+                          <Crown className="h-4 w-4 text-yellow-500 drop-shadow" />
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-medium">{user.name}</span>
+                  </div>
+                  
+                  {/* Host controls - only show if current user is host and not controlling themselves */}
+                  {isHost && user.id !== `${userName}_host_${roomId}` && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem 
+                          onClick={() => handleAppointHost(user.id)}
+                          className="text-primary"
+                        >
+                          <Crown className="h-4 w-4 mr-2" />
+                          Appoint as Host
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          onClick={() => handleKickParticipant(user.id)}
+                          className="text-destructive"
+                        >
+                          <LogOut className="h-4 w-4 mr-2" />
+                          Kick
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </DialogContent>
+        </Dialog>
+
+        {/* Name Prompt Modal */}
+        <Dialog open={isNamePromptOpen}>
+          <DialogContent className="max-w-xs">
+            <DialogHeader>
+              <DialogTitle>Enter your name</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleNameSubmit} className="flex flex-col gap-3">
+              <Input
+                autoFocus
+                placeholder="Your name"
+                value={nameInput}
+                onChange={e => setNameInput(e.target.value)}
+                maxLength={20}
+                required
+              />
+              <Button type="submit" className="w-full">Join Room</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
 
       </div>
     </TooltipProvider>
