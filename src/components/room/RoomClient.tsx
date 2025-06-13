@@ -584,12 +584,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       });
     }
   };
-
   const getYouTubeEmbedUrl = (url: string): string | null => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     if (match && match[2].length === 11) {
-      return `https://www.youtube.com/embed/${match[2]}?autoplay=1&controls=1&rel=0&showinfo=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}&playsinline=1&fs=1`;
+      return `https://www.youtube.com/embed/${match[2]}?autoplay=1&controls=1&rel=0&showinfo=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}&playsinline=1&fs=1&iv_load_policy=3`;
     }
     return null;
   };
@@ -676,7 +675,6 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
     return () => unsub();
   }, [roomId]);
-
   // Add YouTube iframe API ready handler
   useEffect(() => {
     const handleYouTubeMessage = (event: MessageEvent) => {
@@ -692,8 +690,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 ...mediaState,
                 isPlaying
               }, { merge: true });
-            }
-          } else if (data.event === 'onReady') {
+            }          } else if (data.event === 'onReady') {
             // When the iframe is ready, sync with the current state
             if (mediaState.isPlaying) {
               event.source?.postMessage(JSON.stringify({
@@ -709,6 +706,27 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 args: [mediaState.currentTime, true]
               }), { targetOrigin: '*' });
             }
+            // Set initial volume if we have a stored volume
+            if (screenShareVolume > 0) {
+              event.source?.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'setVolume',
+                args: [screenShareVolume * 100]
+              }), { targetOrigin: '*' });
+            }
+            // Request current volume info
+            event.source?.postMessage(JSON.stringify({
+              event: 'listening',
+              id: 'volumeListener',
+              channel: 'widget'
+            }), { targetOrigin: '*' });
+          }else if (data.event === 'infoDelivery' && data.info && data.info.volume !== undefined) {
+            // Handle volume changes from YouTube player
+            const youtubeVolume = data.info.volume / 100; // Convert from 0-100 to 0-1
+            const isMuted = data.info.muted || youtubeVolume === 0;
+            
+            setScreenShareVolume(youtubeVolume);
+            setIsScreenShareMuted(isMuted);
           }
         } catch (e) {
           // Not a JSON message
@@ -982,9 +1000,36 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       // State will be updated by 'play'/'pause' event listeners
     }
   };
-
   const toggleScreenShareMute = () => {
-    if (videoRef.current && screenStreamRef.current) {
+    if (isYouTubeVideo && mediaFrameRef.current) {
+      // Handle YouTube video mute/unmute
+      const iframe = mediaFrameRef.current;
+      if (isScreenShareMuted) { // Currently muted, so unmute
+        iframe.contentWindow?.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'unMute',
+          args: ''
+        }), { targetOrigin: '*' });
+        // Restore previous volume or set to default if previous was 0
+        const volumeToRestore = previousVolume > 0 ? previousVolume * 100 : 50;
+        iframe.contentWindow?.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'setVolume',
+          args: [volumeToRestore]
+        }), { targetOrigin: '*' });
+        setScreenShareVolume(volumeToRestore / 100);
+        setIsScreenShareMuted(false);
+      } else { // Currently unmuted, so mute
+        setPreviousVolume(screenShareVolume); // Store current volume
+        iframe.contentWindow?.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'mute',
+          args: ''
+        }), { targetOrigin: '*' });
+        setScreenShareVolume(0);
+        setIsScreenShareMuted(true);
+      }
+    } else if (videoRef.current && screenStreamRef.current) {
       const currentlyMuted = videoRef.current.muted;
       if (currentlyMuted) { // Unmuting
         videoRef.current.muted = false;
@@ -999,10 +1044,40 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       // setIsScreenShareMuted(!currentlyMuted); // Handled by volumechange event
     }
   };
-  
-  const handleVolumeChange = (newVolumeArray: number[]) => {
+    const handleVolumeChange = (newVolumeArray: number[]) => {
     const newVolume = newVolumeArray[0];
-    if (videoRef.current && screenStreamRef.current) {
+    
+    if (isYouTubeVideo && mediaFrameRef.current) {
+      // Handle YouTube video volume
+      const iframe = mediaFrameRef.current;
+      const youtubeVolume = newVolume * 100; // YouTube expects 0-100
+      
+      iframe.contentWindow?.postMessage(JSON.stringify({
+        event: 'command',
+        func: 'setVolume',
+        args: [youtubeVolume]
+      }), { targetOrigin: '*' });
+      
+      // Also handle mute/unmute
+      if (newVolume === 0) {
+        iframe.contentWindow?.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'mute',
+          args: ''
+        }), { targetOrigin: '*' });
+        setIsScreenShareMuted(true);
+      } else {
+        iframe.contentWindow?.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'unMute',
+          args: ''
+        }), { targetOrigin: '*' });
+        setIsScreenShareMuted(false);
+      }
+      
+      setScreenShareVolume(newVolume);
+    } else if (videoRef.current && screenStreamRef.current) {
+      // Handle regular video volume
       videoRef.current.volume = newVolume;
       videoRef.current.muted = newVolume === 0;
       // State updates (screenShareVolume, isScreenShareMuted) are handled by the 'volumechange' event listener
@@ -1386,16 +1461,14 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                         </Button>
                       </TooltipTrigger>
                           <TooltipContent><p>{mediaState.isPlaying ? "Pause" : "Play"}</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
+                    </Tooltip>                    <Tooltip>
                       <TooltipTrigger asChild>
-                         <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={toggleScreenShareMute} disabled={!isScreenShareActive}>
+                         <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={toggleScreenShareMute} disabled={!isScreenShareActive && !isYouTubeVideo}>
                            {isScreenShareMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                          </Button>
                       </TooltipTrigger>
                       <TooltipContent><p>{isScreenShareMuted ? "Unmute" : "Mute"}</p></TooltipContent>
-                    </Tooltip>
-                     <Slider
+                    </Tooltip><Slider
                         value={[screenShareVolume]}
                         max={1}
                         step={0.01}
@@ -1407,7 +1480,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                           "[&>[data-radix-slider-thumb]]:h-3 [&>[data-radix-slider-thumb]]:w-3 [&>[data-radix-slider-thumb]]:bg-white [&>[data-radix-slider-thumb]]:border-0 [&>[data-radix-slider-thumb]]:shadow-sm",
                           "[&>[data-radix-slider-thumb]:focus-visible]:ring-white/50 [&>[data-radix-slider-thumb]:focus-visible]:ring-offset-0"
                         )}
-                        disabled={!isScreenShareActive || isScreenShareMuted}
+                        disabled={(!isScreenShareActive && !isYouTubeVideo) || isScreenShareMuted}
                       />
                       </>
                     )}
