@@ -1442,8 +1442,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   </div>
                 </div>
               </div>
-            )}              {/* Participant Avatars */}
-            <div className="w-full max-w-4xl mt-4 bg-muted/30 rounded-xl p-4 flex justify-center items-center space-x-2 md:space-x-3 shadow-xl backdrop-blur-sm">
+            )}
+              {/* Participant Avatars */}
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-4/5 md:max-w-3/4 lg:max-w-1/2 h-auto pb-1 pt-2 px-4 bg-muted/30 rounded-t-xl flex justify-center items-end space-x-2 md:space-x-3 shadow-xl backdrop-blur-sm">
               {/* Firebase participants */}
               {allParticipants.map(user => {
                 const isCurrentUser = user.id === `${userName}_${isHost ? 'host' : 'guest'}_${roomId}`;
