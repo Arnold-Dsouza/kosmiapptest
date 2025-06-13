@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from "@/lib/utils";
+import { useLiveKit } from '@/hooks/use-livekit';
 import {
   Video,
   Users,
@@ -39,6 +40,7 @@ import {
   Youtube, // YouTube icon
   Crown,
 } from 'lucide-react';
+import { Track, RemoteTrack, RemoteTrackPublication, RemoteParticipant } from 'livekit-client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -87,6 +89,14 @@ interface Participant {
 }
 
 export default function RoomClient({ roomId }: RoomClientProps) {
+  // Add hydration state
+  const [isHydrated, setIsHydrated] = useState(false);
+  
+  // Hydration effect
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMicOn, setIsMicOn] = useState(false);
@@ -127,9 +137,12 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [isHost, setIsHost] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
+
+  // LiveKit integration state
+  const [livekitToken, setLivekitToken] = useState<string>('placeholder-token');
+  const [livekitServerUrl, setLivekitServerUrl] = useState<string>('wss://placeholder.livekit.cloud');
 
   // Add new state for media sync
   const [mediaState, setMediaState] = useState<{
@@ -145,8 +158,149 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     sourceText: null,
     isPlaying: false,
     currentTime: 0,
-    duration: 0
-  });
+    duration: 0  });
+  
+  // Initialize LiveKit hook only after hydration to prevent SSR mismatch
+  const livekit = useLiveKit({
+    serverUrl: isHydrated ? livekitServerUrl : 'wss://placeholder.livekit.cloud',
+    token: isHydrated ? livekitToken : 'placeholder-token',
+    onConnected: () => {
+      console.log('✅ LiveKit connected successfully');
+      toast({
+        title: "Connected",
+        description: "Connected to collaboration service",
+      });
+    },
+    onDisconnected: () => {
+      console.log('❌ LiveKit disconnected');
+      toast({
+        variant: "destructive",
+        title: "Disconnected",
+        description: "Lost connection to collaboration service",
+      });
+    },
+    onError: (error) => {
+      console.error('LiveKit error:', error);
+      toast({
+        variant: "destructive",
+        title: "Connection Error",
+        description: error.message,
+      });
+    },
+  });  // --- LiveKit screen share event listeners (for all participants) ---
+  useEffect(() => {
+    if (!livekit.room) return;
+
+    const handleTrackSubscribed = (
+      track: RemoteTrack,
+      publication: RemoteTrackPublication,
+      participant: RemoteParticipant
+    ) => {
+      console.log('📺 Track subscribed:', { 
+        source: track.source, 
+        kind: track.kind, 
+        participant: participant.identity 
+      });
+      
+      if (track.source === Track.Source.ScreenShare && track.kind === 'video') {
+        console.log('📺 Screen share track detected, attaching to video element');
+        if (videoRef.current) {
+          track.attach(videoRef.current);
+          videoRef.current.classList.remove('hidden');
+          videoRef.current.style.objectFit = 'contain';
+          videoRef.current.style.backgroundColor = '#000';
+          videoRef.current.style.width = '100%';
+          videoRef.current.style.height = '100%';
+          if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
+          if (mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden');
+          setMediaSourceText(`Screen shared by ${participant.name || participant.identity}`);
+          setIsYouTubeVideo(false);
+          setCurrentMediaUrl(null);
+          console.log('✅ Screen share attached successfully');
+        }
+      }
+    };
+    
+    const handleTrackUnsubscribed = (
+      track: RemoteTrack,
+      publication: RemoteTrackPublication,
+      participant: RemoteParticipant
+    ) => {
+      console.log('📺 Track unsubscribed:', { 
+        source: track.source, 
+        kind: track.kind, 
+        participant: participant.identity 
+      });
+      
+      if (track.source === Track.Source.ScreenShare && track.kind === 'video') {
+        console.log('📺 Screen share track removed, detaching from video element');
+        if (videoRef.current) {
+          track.detach();
+          videoRef.current.classList.add('hidden');
+          if (!currentMediaUrl && placeholderContentRef.current) placeholderContentRef.current.classList.remove('hidden');
+          setMediaSourceText(null);
+          console.log('✅ Screen share detached successfully');
+        }
+      }
+    };
+
+    // Handle LOCAL track published (for host to see their own screen share)
+    const handleLocalTrackPublished = (publication: any, participant: any) => {
+      console.log('📺 Local track published:', { 
+        source: publication.source, 
+        kind: publication.kind 
+      });
+      
+      if (publication.source === Track.Source.ScreenShare && publication.kind === 'video' && publication.track) {
+        console.log('📺 Local screen share track detected, attaching to video element for host');
+        if (videoRef.current) {
+          publication.track.attach(videoRef.current);
+          videoRef.current.classList.remove('hidden');
+          videoRef.current.style.objectFit = 'contain';
+          videoRef.current.style.backgroundColor = '#000';
+          videoRef.current.style.width = '100%';
+          videoRef.current.style.height = '100%';
+          if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
+          if (mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden');
+          setMediaSourceText("Your Screen (Live)");
+          setIsYouTubeVideo(false);
+          setCurrentMediaUrl(null);
+          console.log('✅ Host screen share attached successfully');
+        }
+      }
+    };
+
+    // Handle LOCAL track unpublished (when host stops sharing)
+    const handleLocalTrackUnpublished = (publication: any, participant: any) => {
+      console.log('📺 Local track unpublished:', { 
+        source: publication.source, 
+        kind: publication.kind 
+      });
+      
+      if (publication.source === Track.Source.ScreenShare && publication.kind === 'video') {
+        console.log('📺 Local screen share track removed, detaching from video element');
+        if (videoRef.current) {
+          publication.track?.detach();
+          videoRef.current.classList.add('hidden');
+          if (!currentMediaUrl && placeholderContentRef.current) placeholderContentRef.current.classList.remove('hidden');
+          setMediaSourceText(null);
+          console.log('✅ Host screen share detached successfully');
+        }
+      }
+    };
+    
+    livekit.room.on('trackSubscribed', handleTrackSubscribed);
+    livekit.room.on('trackUnsubscribed', handleTrackUnsubscribed);
+    livekit.room.on('localTrackPublished', handleLocalTrackPublished);
+    livekit.room.on('localTrackUnpublished', handleLocalTrackUnpublished);
+    
+    return () => {
+      livekit.room?.off('trackSubscribed', handleTrackSubscribed);
+      livekit.room?.off('trackUnsubscribed', handleTrackUnsubscribed);
+      livekit.room?.off('localTrackPublished', handleLocalTrackPublished);
+      livekit.room?.off('localTrackUnpublished', handleLocalTrackUnpublished);
+    };
+  }, [livekit.room, currentMediaUrl]);
 
   const formatTime = (timeInSeconds: number): string => {
     if (isNaN(timeInSeconds) || !isFinite(timeInSeconds)) return "00:00";
@@ -215,8 +369,49 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     } else if (mediaFrameRef.current && currentMediaUrl) {
        mediaFrameRef.current.classList.remove('hidden');
        if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
+    }  }, [currentMediaUrl]);
+
+  // Function to get LiveKit token from backend
+  const getLivekitToken = useCallback(async () => {
+    if (!userName || !roomId) return;
+    
+    try {
+      console.log('🎫 Getting LiveKit token from backend server...');
+      const response = await fetch('http://localhost:3001/api/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomName: roomId,
+          participantName: userName,
+          identity: userName,
+          isHost: isHost,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get token: ${response.status} ${response.statusText}`);
+      }      const data = await response.json();
+      console.log('✅ Received LiveKit token from backend:', {
+        hasToken: !!data.token,
+        tokenLength: data.token?.length,
+        tokenPreview: data.token?.substring(0, 50) + '...',
+        wsUrl: data.wsUrl
+      });
+      
+      setLivekitToken(data.token);
+      setLivekitServerUrl(data.wsUrl || 'wss://screenshare-3gbbe0by.livekit.cloud');
+      
+    } catch (error) {
+      console.error('❌ Failed to get LiveKit token:', error);
+      toast({
+        variant: "destructive",
+        title: "Connection Error",
+        description: "Failed to connect to screen sharing service",
+      });
     }
-  }, [currentMediaUrl]);
+  }, [userName, roomId, isHost, toast]);
 
  useEffect(() => {
     const video = videoRef.current;
@@ -301,8 +496,14 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           description: `${lastMsg.user} has joined the room!`,
         });
       }
+    }  }, [messages, toast]);
+
+  // Get LiveKit token when user name is set
+  useEffect(() => {
+    if (userName && roomId) {
+      getLivekitToken();
     }
-  }, [messages, toast]);
+  }, [userName, roomId, isHost, getLivekitToken]);
 
   // Add current user to the room's participants list
   useEffect(() => {
@@ -657,48 +858,79 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       }
     }
     setIsSelectMediaModalOpen(false);
-  };
-
-  const handleShareScreen = async () => {
+  };  const handleShareScreen = async () => {
+    console.log('handleShareScreen called');
+    
     if (isSelectMediaModalOpen) setIsSelectMediaModalOpen(false);
-    if (currentMediaUrl) stopMediaPlayback(); 
-
-    if (screenStreamRef.current) {
-        stopScreenShare(); 
+    if (currentMediaUrl) stopMediaPlayback();    // Check if already screen sharing
+    if (livekit.isScreenSharing) {
+      console.log('Stopping existing LiveKit screen share');
+      
+      // Stop LiveKit screen share (this will trigger localTrackUnpublished event)
+      await livekit.stopScreenShare();
+      
+      return;
     }
 
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true, // Request audio as well
+    // Check if connected to LiveKit
+    if (!livekit.isConnected) {
+      toast({
+        variant: "destructive",
+        title: "Not Connected",
+        description: "Connecting to screen sharing service...",
       });
-      screenStreamRef.current = stream;
+      
+      // Try to get token and connect
+      await getLivekitToken();
+      
+      // Wait a moment for connection
+      setTimeout(async () => {
+        if (livekit.isConnected) {
+          await handleShareScreen(); // Retry after connection
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Connection Failed",
+            description: "Could not connect to screen sharing service",
+          });
+        }
+      }, 2000);
+      return;
+    }    try {
+      console.log('Starting LiveKit screen share...');
+      
+      // Start screen sharing with LiveKit (this will trigger localTrackPublished event for host to see)
+      await livekit.startScreenShare();
+      
+      console.log('LiveKit screen share started successfully - host will see via localTrackPublished event');
+      
+      toast({
+        title: "Screen Share Started",
+        description: "Your screen is now being shared with all participants",
+      });
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(error => console.error("Error playing video:", error));
-        videoRef.current.classList.remove('hidden');
-        // Initial mute state can be set here or by useEffect based on video.muted
-        // videoRef.current.muted = true; 
-        // setIsScreenShareMuted(true);
-        // setScreenShareVolume(0);
-      }
-      if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
-      if (mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden');
-      setMediaSourceText("Your Screen");
-      setIsYouTubeVideo(false);
-
-
-      stream.getVideoTracks()[0].onended = () => {
-        stopScreenShare();
-      };
     } catch (err: any) {
       console.error("Error sharing screen:", err);
+      
+      // Provide better error messages
+      let errorMessage = "Could not start screen sharing. Please ensure permission is granted.";
+      
+      if (err?.name === 'NotAllowedError') {
+        errorMessage = "Screen sharing permission was denied. Please allow access and try again.";
+      } else if (err?.name === 'NotFoundError') {
+        errorMessage = "No screen available for sharing.";
+      } else if (err?.name === 'NotSupportedError') {
+        errorMessage = "Screen sharing is not supported in this browser.";
+      } else if (err?.message) {
+        errorMessage = err.message;
+      }
+      
       toast({
         variant: "destructive",
         title: "Screen Share Failed",
-        description: err.message || "Could not start screen sharing. Please ensure permission is granted.",
+        description: errorMessage,
       });
+      
       if (videoRef.current) videoRef.current.classList.add('hidden');
       
       if (currentMediaUrl && mediaFrameRef.current) {
@@ -708,7 +940,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         placeholderContentRef.current.classList.remove('hidden');
         if(mediaFrameRef.current) mediaFrameRef.current.classList.add('hidden');
       }
-       setMediaSourceText(null);
+      setMediaSourceText(null);
     }
   };
 
@@ -972,6 +1204,17 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     }
     setIsMicOn(!isMicOn);
   };
+  // Prevent hydration mismatch by only rendering after hydration
+  if (!isHydrated) {
+    return (
+      <div className="flex h-screen bg-background text-foreground overflow-hidden items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading room...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider>
@@ -1049,20 +1292,27 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </Link>
               </Button>
             </div>
-          </header>
-
-          {/* Content Area */}
-          <main className="flex-1 flex flex-col items-center justify-center p-4 relative bg-background" ref={mainMediaContainerRef}>
-            <div className="w-full max-w-4xl aspect-[16/7] bg-black/50 rounded-lg shadow-2xl flex flex-col items-center justify-center border border-border overflow-hidden">
-              <video ref={videoRef} className="w-full h-full object-contain rounded-md hidden" playsInline />
+          </header>          {/* Content Area */}          <main className="flex-1 flex flex-col items-center justify-center p-4 bg-background" ref={mainMediaContainerRef}>
+            <div className="w-full max-w-4xl aspect-[16/9] bg-black rounded-lg shadow-2xl relative border border-border overflow-hidden">
+              <video 
+                ref={videoRef} 
+                className="absolute inset-0 w-full h-full rounded-md hidden" 
+                playsInline 
+                autoPlay
+                style={{
+                  objectFit: 'contain',
+                  backgroundColor: '#000'
+                }}
+              />              
+              {/* LiveKit screen share will be handled by track subscription events to the main videoRef */}
               <iframe 
                 ref={mediaFrameRef} 
-                className="w-full h-full border-0 hidden" 
+                className="absolute inset-0 w-full h-full border-0 rounded-md hidden" 
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
                 title="Media Content"
               ></iframe>
-              <div ref={placeholderContentRef} className="text-center p-8">
+              <div ref={placeholderContentRef} className="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
                 <h2 className="text-2xl font-semibold text-muted-foreground mb-4">Your virtual space is ready.</h2>
                 {isHost && (
                  <Button size="lg" className="bg-primary hover:bg-primary/80" onClick={() => setIsSelectMediaModalOpen(true)}>
@@ -1073,9 +1323,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </div>
             </div>
 
-            {/* Media Control Bar */}
+            {/* Media Control Bar - Positioned below the display */}
             {isMediaActive && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl bg-black/80 p-2 rounded-lg shadow-xl backdrop-blur-sm flex flex-col gap-1.5">
+              <div className="w-full max-w-4xl mt-4 bg-black/80 p-2 rounded-lg shadow-xl backdrop-blur-sm flex flex-col gap-1.5">
                 {/* Progress Bar and Time */}
                 <div className="flex items-center gap-2 px-1">
                   <span className="text-xs text-white w-12 text-center">{currentTimeDisplay}</span>
@@ -1192,10 +1442,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   </div>
                 </div>
               </div>
-            )}
-            
-            {/* Participant Avatars */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-4/5 md:max-w-3/4 lg:max-w-1/2 h-auto pb-1 pt-2 px-4 bg-muted/30 rounded-t-xl flex justify-center items-end space-x-2 md:space-x-3 shadow-xl backdrop-blur-sm">
+            )}              {/* Participant Avatars */}
+            <div className="w-full max-w-4xl mt-4 bg-muted/30 rounded-xl p-4 flex justify-center items-center space-x-2 md:space-x-3 shadow-xl backdrop-blur-sm">
+              {/* Firebase participants */}
               {allParticipants.map(user => {
                 const isCurrentUser = user.id === `${userName}_${isHost ? 'host' : 'guest'}_${roomId}`;
                 return (
@@ -1232,6 +1481,40 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   </div>
                 );
               })}
+              
+              {/* LiveKit participants (only those not already in Firebase list) */}
+              {livekit.participants
+                .filter(lkParticipant => 
+                  !allParticipants.some(fbParticipant => 
+                    fbParticipant.name === lkParticipant.name || fbParticipant.name === lkParticipant.identity
+                  )
+                )
+                .map(lkParticipant => (
+                  <div key={`livekit-${lkParticipant.identity}`} className="flex flex-col items-center text-center">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="relative">                          <Avatar className="h-12 w-12 md:h-16 md:w-16 border-2 border-green-500 ring-2 ring-green-500/50 mb-0.5 hover:scale-110 transition-transform cursor-pointer">
+                            <AvatarFallback className="bg-green-100 text-green-700">
+                              {(lkParticipant.name || lkParticipant.identity).charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
+                          {lkParticipant.screenShareTrack && (
+                            <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs px-1 rounded-full">
+                              📺
+                            </span>
+                          )}
+                        </div>
+                      </TooltipTrigger>                      <TooltipContent>
+                        <p>{lkParticipant.name || lkParticipant.identity} (LiveKit)</p>
+                        {lkParticipant.screenShareTrack && <p className="text-xs text-blue-400">Screen sharing</p>}
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className="text-xs max-w-[60px] truncate text-green-600 font-medium">
+                      {lkParticipant.name || lkParticipant.identity}
+                    </span>
+                  </div>
+                ))
+              }
             </div>
           </main>
         </div>
@@ -1464,8 +1747,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 required
               />
               <Button type="submit" className="w-full">Join Room</Button>
-            </form>
-          </DialogContent>
+            </form>          </DialogContent>
         </Dialog>
 
       </div>
