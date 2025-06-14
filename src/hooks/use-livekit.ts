@@ -225,8 +225,7 @@ export const useLiveKit = ({
         console.log('Local track unpublished');
         updateParticipants();
       });
-      
-      newRoom.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+        newRoom.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
         console.log('Connection state changed:', state);
         if (state === ConnectionState.Connected) {
           setIsConnected(true);
@@ -235,23 +234,95 @@ export const useLiveKit = ({
         } else if (state === ConnectionState.Disconnected) {
           setIsConnected(false);
           onDisconnected?.();
+        } else if (state === ConnectionState.Reconnecting) {
+          console.log('Reconnecting to LiveKit...');
         }
       });
-      
-      // Connect to the room
+
+      // Add error event listener for better error handling
+      newRoom.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+        console.log('Connection quality changed:', { quality, participant: participant?.identity });
+      });
+
+      // Handle DataChannel and WebRTC errors
+      newRoom.on(RoomEvent.DataReceived, (payload, participant) => {
+        // Data channel is working if we receive data
+        console.log('Data received from participant:', participant?.identity);
+      });
+        // Connect to the room with optimized settings for DataChannel stability
       console.log('Attempting to connect to LiveKit room:', { 
         serverUrl: currentServerUrl,
         hasToken: !!currentToken,
         tokenPreview: currentToken ? (currentToken.length > 20 ? currentToken.substring(0, 20) + '...' : currentToken) : 'no token'
       });
       
-      await newRoom.connect(currentServerUrl, currentToken);
-      console.log('Successfully connected to LiveKit room');
+      // Use connection options that may help with DataChannel stability
+      const connectOptions = {
+        autoSubscribe: true,
+        publishDefaults: {
+          simulcast: false, // Disable simulcast which can cause DataChannel issues
+        },
+        rtcConfig: {
+          // ICE servers configuration to improve connection reliability
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+          ],
+          iceCandidatePoolSize: 10, // Increase candidate pool for better connectivity
+        },
+      };
+      
+      await newRoom.connect(currentServerUrl, currentToken, connectOptions);
+      console.log('Successfully connected to LiveKit room');      // Monitor for DataChannel errors after connection
+      // This will catch runtime DataChannel errors that occur after initial connection
+      const originalConsoleError = console.error;
+      const dataChannelErrorHandler = (...args: any[]) => {
+        const message = args.join(' ');
+        if (message.includes('DataChannel error') || message.includes('data channel')) {
+          console.warn('🔧 Runtime DataChannel error detected:', {
+            message,
+            timestamp: new Date().toISOString(),
+            connectionState: newRoom.state,
+            participantCount: newRoom.numParticipants,
+            args
+          });
+          // Trigger onError callback for DataChannel errors
+          onError?.(new Error(`DataChannel error: ${message}`));
+        } else if (message.includes('RTCEngine') && message.includes('error')) {
+          console.warn('🔧 RTCEngine error detected:', {
+            message,
+            timestamp: new Date().toISOString(),
+            args
+          });
+        }
+        // Call original console.error
+        originalConsoleError.apply(console, args);
+      };
+      
+      // Temporarily override console.error to catch DataChannel errors
+      console.error = dataChannelErrorHandler;
+      
+      // Store reference for cleanup
+      (newRoom as any)._originalConsoleError = originalConsoleError;
+      (newRoom as any)._dataChannelErrorHandler = dataChannelErrorHandler;
       
       // Set room state AFTER successful connection
-      setRoom(newRoom);
-    } catch (error) {
+      setRoom(newRoom);} catch (error) {
       console.log('Failed to connect to room:', error);
+      
+      // Enhanced error handling for different types of connection issues
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      if (errorMessage.includes('DataChannel') || errorMessage.includes('data channel')) {
+        console.error('🔧 DataChannel connection failed:', error);
+        // For DataChannel errors, we'll let the onError callback handle recovery
+      } else if (errorMessage.includes('WebRTC') || errorMessage.includes('ICE')) {
+        console.error('🌐 WebRTC/ICE connection failed:', error);
+      } else if (errorMessage.includes('token') || errorMessage.includes('auth')) {
+        console.error('🔑 Authentication failed:', error);
+      } else {
+        console.error('❌ General connection error:', error);
+      }
       
       setIsConnecting(false);
       setIsConnected(false);
@@ -268,10 +339,14 @@ export const useLiveKit = ({
       console.log('connectToRoom finished');
     }
   }, [serverUrl, token, isConnecting, onConnected, onDisconnected, onError, updateParticipants]);
-
   // Disconnect from room
   const disconnectFromRoom = useCallback(async () => {
     if (roomRef.current) {
+      // Restore original console.error if it was overridden
+      if ((roomRef.current as any)._originalConsoleError) {
+        console.error = (roomRef.current as any)._originalConsoleError;
+      }
+      
       await roomRef.current.disconnect();
       roomRef.current = null;
       setRoom(null);

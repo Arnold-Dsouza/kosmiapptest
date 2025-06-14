@@ -129,6 +129,13 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [areCaptionsEnabled, setAreCaptionsEnabled] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Connection health monitoring states
+  const [connectionHealth, setConnectionHealth] = useState<'good' | 'poor' | 'disconnected'>('good');
+  const [reconnectionAttempts, setReconnectionAttempts] = useState(0);
+  const [lastConnectionError, setLastConnectionError] = useState<string | null>(null);
+  const connectionMonitorRef = useRef<NodeJS.Timeout | null>(null);
+  const maxReconnectionAttempts = 3;
 
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
 
@@ -156,11 +163,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     duration: number;
   }>({
     url: null,
-    isYouTube: false,
-    sourceText: null,
+    isYouTube: false,    sourceText: null,
     isPlaying: false,
     currentTime: 0,
-    duration: 0  });
+    duration: 0
+  });
   
   // Initialize LiveKit hook only after hydration to prevent SSR mismatch
   const livekit = useLiveKit({
@@ -180,16 +187,112 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         title: "Disconnected",
         description: "Lost connection to collaboration service",
       });
-    },
-    onError: (error) => {
+    },    onError: (error) => {
       console.error('LiveKit error:', error);
-      toast({
-        variant: "destructive",
-        title: "Connection Error",
-        description: error.message,
-      });
+      
+      const errorMessage = error.message?.toLowerCase() || '';
+      setLastConnectionError(error.message); // Track last error for auto-reconnection
+      
+      // Handle specific data channel errors with recovery mechanisms
+      if (errorMessage.includes('datachannel') || errorMessage.includes('data channel')) {
+        console.warn('🔧 DataChannel error detected, attempting recovery...', error);
+        
+        // For participants, DataChannel errors are often recoverable
+        // The auto-reconnection system will handle this
+        toast({
+          variant: "destructive",
+          title: "Connection Issue",
+          description: "Experiencing connectivity issues, trying to reconnect...",
+          duration: 3000,
+        });
+      } else if (errorMessage.includes('webrtc') || errorMessage.includes('ice')) {
+        console.error('🌐 WebRTC/ICE error:', error);
+        toast({
+          variant: "destructive",
+          title: "Network Error",
+          description: "WebRTC connection failed. Check your network connection.",
+          duration: 5000,
+        });
+      } else if (errorMessage.includes('token') || errorMessage.includes('auth')) {
+        console.error('🔑 Authentication error:', error);
+        toast({
+          variant: "destructive",
+          title: "Authentication Error",
+          description: "Session expired. Please refresh the page.",
+          duration: 5000,
+        });
+      } else {
+        console.error('❌ General LiveKit error:', error);
+        toast({
+          variant: "destructive",
+          title: "Connection Error",
+          description: error.message || "An unexpected error occurred",
+          duration: 4000,
+        });
+      }
     },
-  });  // --- LiveKit screen share event listeners (for all participants) ---
+  });
+
+  // --- Connection Health Monitoring ---
+  useEffect(() => {
+    if (!livekit.room) {
+      setConnectionHealth('disconnected');
+      return;
+    }
+
+    // Monitor connection health
+    const monitorConnection = () => {
+      if (livekit.isConnected) {
+        setConnectionHealth('good');
+        setReconnectionAttempts(0);
+        setLastConnectionError(null);
+      } else if (livekit.isConnecting) {
+        setConnectionHealth('poor');
+      } else {
+        setConnectionHealth('disconnected');
+      }
+    };
+
+    // Initial check
+    monitorConnection();
+
+    // Set up periodic monitoring
+    connectionMonitorRef.current = setInterval(monitorConnection, 5000);
+
+    return () => {
+      if (connectionMonitorRef.current) {
+        clearInterval(connectionMonitorRef.current);
+        connectionMonitorRef.current = null;
+      }
+    };
+  }, [livekit.room, livekit.isConnected, livekit.isConnecting]);
+
+  // --- Auto-reconnection for DataChannel errors ---
+  useEffect(() => {
+    if (connectionHealth === 'disconnected' && 
+        reconnectionAttempts < maxReconnectionAttempts && 
+        lastConnectionError?.toLowerCase().includes('datachannel')) {
+      
+      const reconnectDelay = Math.min(2000 * Math.pow(2, reconnectionAttempts), 10000); // Exponential backoff
+      
+      console.log(`🔄 Attempting reconnection ${reconnectionAttempts + 1}/${maxReconnectionAttempts} in ${reconnectDelay}ms`);
+      
+      const reconnectTimer = setTimeout(async () => {
+        try {
+          setReconnectionAttempts(prev => prev + 1);
+          await livekit.connectToRoom();
+          console.log('✅ Reconnection successful');
+        } catch (error) {
+          console.error('🚫 Reconnection failed:', error);
+          setLastConnectionError(error instanceof Error ? error.message : String(error));
+        }
+      }, reconnectDelay);
+
+      return () => clearTimeout(reconnectTimer);
+    }
+  }, [connectionHealth, reconnectionAttempts, lastConnectionError, livekit.connectToRoom, maxReconnectionAttempts]);
+
+  // --- LiveKit screen share event listeners (for all participants) ---
   useEffect(() => {
     if (!livekit.room) return;
 
@@ -1631,8 +1734,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen bg-background text-foreground overflow-hidden">
-        {/* Left Toolbar */}
+      <div className="flex h-screen bg-background text-foreground overflow-hidden">        {/* Left Toolbar */}
         <aside className="w-16 bg-card p-3 flex flex-col items-center space-y-4 border-r border-border">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1657,6 +1759,26 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right"><p>Explore Rooms</p></TooltipContent>
+          </Tooltip>
+          
+          {/* Connection Status Indicator at bottom */}
+          <div className="flex-1"></div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className={cn(
+                "w-3 h-3 rounded-full",
+                connectionHealth === 'good' && "bg-green-500",
+                connectionHealth === 'poor' && "bg-yellow-500 animate-pulse",
+                connectionHealth === 'disconnected' && "bg-red-500 animate-pulse"
+              )}></div>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>
+                {connectionHealth === 'good' && 'Connected'}
+                {connectionHealth === 'poor' && 'Poor Connection'}
+                {connectionHealth === 'disconnected' && `Disconnected${reconnectionAttempts > 0 ? ` (Attempt ${reconnectionAttempts}/${maxReconnectionAttempts})` : ''}`}
+              </p>
+            </TooltipContent>
           </Tooltip>
         </aside>
 
@@ -1705,10 +1827,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </Link>
               </Button>
             </div>
-          </header>          {/* Content Area */}          <main className="flex-1 flex flex-col items-center justify-center p-4 bg-background" ref={mainMediaContainerRef}>
+          </header>          {/* Content Area */}          <main className="flex-1 flex flex-col items-center justify-start p-9 p-4 bg-background" ref={mainMediaContainerRef}>
             <div 
               ref={videoContainerRef}
-              className="w-full max-w-4xl aspect-[16/9] bg-black rounded-lg shadow-2xl relative border border-border overflow-hidden"
+              className="w-full max-w-2xl aspect-[16/9] bg-black rounded-lg shadow-2xl relative border border-border overflow-hidden"
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
             >
