@@ -2226,72 +2226,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       </div>
     );
   }
-
   return (
     <TooltipProvider>
-      <div className="flex h-screen bg-background text-foreground overflow-hidden">        {/* Left Toolbar */}
-        <aside className="w-16 bg-card p-3 flex flex-col items-center space-y-4 border-r border-border">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
-                <PenTool className="h-6 w-6" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right"><p>Drawing Tools</p></TooltipContent>
-          </Tooltip>
-           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
-                <PlusCircle className="h-6 w-6" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right"><p>Add Content</p></TooltipContent>
-          </Tooltip>          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
-                <Globe className="h-6 w-6" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right"><p>Explore Rooms</p></TooltipContent>
-          </Tooltip>
-          
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="text-muted-foreground hover:text-primary"
-                onClick={() => setIsThemeModalOpen(true)}
-              >
-                <Settings2 className="h-6 w-6" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right"><p>Change Theme</p></TooltipContent>
-          </Tooltip>
-          
-          {/* Connection Status Indicator at bottom */}
-          <div className="flex-1"></div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className={cn(
-                "w-3 h-3 rounded-full",
-                connectionHealth === 'good' && "bg-green-500",
-                connectionHealth === 'poor' && "bg-yellow-500 animate-pulse",
-                connectionHealth === 'disconnected' && "bg-red-500 animate-pulse"
-              )}></div>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p>
-                {connectionHealth === 'good' && 'Connected'}
-                {connectionHealth === 'poor' && 'Poor Connection'}
-                {connectionHealth === 'disconnected' && `Disconnected${reconnectionAttempts > 0 ? ` (Attempt ${reconnectionAttempts}/${maxReconnectionAttempts})` : ''}`}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </aside>
-
-        {/* Main Area Container */}
-        <div className="flex-1 flex flex-col">          {/* Top Bar */}
+      <div className="flex h-screen bg-background text-foreground overflow-hidden">        {/* Main Area Container */}
+        <div className="flex-1 flex flex-col">{/* Top Bar */}
           <header className="p-3 flex justify-center items-center border-b border-border bg-card/50 backdrop-blur-sm relative">
             {/* Left side spacer for symmetry */}
             <div className="absolute left-3 flex items-center gap-2">
@@ -2309,8 +2247,77 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   {roomName || `${roomId.split(/[-']/)[0]}'s room`}
                   <ChevronDown className="h-5 w-5 ml-1" />
                 </Button>
-              </DropdownMenuTrigger><DropdownMenuContent>
-                <DropdownMenuItem>Room ID - {roomId}</DropdownMenuItem>
+              </DropdownMenuTrigger>              <DropdownMenuContent className="w-72 p-0">
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-border">
+                  <h3 className="text-lg font-semibold">Rooms</h3>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={() => window.open('/', '_blank')}
+                      className="h-8 w-8"
+                    >
+                      <Globe className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={() => window.open('/', '_blank')}
+                      className="h-8 w-8"
+                    >
+                      <PlusCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Search Bar */}
+                <div className="p-4 border-b border-border">
+                  <div className="relative">
+                    <Input 
+                      placeholder="Search..." 
+                      className="bg-muted/50 border-0 h-9"
+                    />
+                  </div>
+                </div>
+                
+                {/* Current Room Info */}
+                <div className="p-4 border-b border-border">
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.href);
+                      toast({
+                        title: "Room link copied!",
+                        description: "Share this link for others to join.",
+                      });
+                    }}
+                    className="flex items-center gap-2 p-2 rounded-md bg-primary/10"
+                  >
+                    <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                      <span className="text-primary-foreground text-sm font-bold">
+                        {roomName.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-sm">{roomName}</div>
+                      <div className="text-xs text-muted-foreground">Current room • Click to copy link</div>
+                    </div>
+                  </DropdownMenuItem>
+                </div>
+                
+                {/* Join Public Lobby Section */}
+                <div className="p-4">
+                  <div className="text-center">
+                    <div className="text-sm text-muted-foreground mb-2">No one online?</div>
+                    <DropdownMenuItem 
+                      onClick={() => window.open('/', '_blank')}
+                      className="flex items-center justify-center gap-2 p-3 bg-muted/50 hover:bg-muted rounded-md"
+                    >
+                      <Globe className="h-5 w-5" />
+                      <span className="font-medium">Join the public lobby!</span>
+                    </DropdownMenuItem>
+                  </div>
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>            {/* Right side controls */}
             <div className="absolute right-3 flex items-center gap-2">
