@@ -26,8 +26,7 @@ import {
   Bell,
   PlusCircle,
   Globe,
-  Copy,
-  Square, // Stop icon
+  Copy,  Square, // Stop icon
   Play,   // Play icon
   Pause,  // Pause icon
   Volume2, // Volume icon
@@ -39,6 +38,17 @@ import {
   Expand,   // Fullscreen icon
   Youtube, // YouTube icon
   Crown,
+  User, // User/Avatar icon
+  Edit3, // Edit icon
+  Palette, // Appearance icon
+  Eye, // Visibility icon
+  EyeOff, // Hidden visibility icon
+  Shield, // Security icon
+  ChevronRight, // Right arrow icon
+  X, // Close icon
+  Upload, // Upload icon
+  Check, // Check icon for save
+  Edit, // Edit icon
 } from 'lucide-react';
 import { Track, RemoteTrack, RemoteTrackPublication, RemoteParticipant } from 'livekit-client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -136,6 +146,154 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [lastConnectionError, setLastConnectionError] = useState<string | null>(null);
   const connectionMonitorRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectionAttempts = 3;
+  // Theme selection states
+  const [selectedTheme, setSelectedTheme] = useState<keyof typeof backgroundThemes>('default');
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);  // Room settings states
+  const [isRoomSettingsOpen, setIsRoomSettingsOpen] = useState(false);
+  const [roomVisibility, setRoomVisibility] = useState<'Public' | 'Private'>('Private');
+  const [roomName, setRoomName] = useState('');
+  const [roomSettingsView, setRoomSettingsView] = useState<'main' | 'appearance' | 'avatar' | 'roomname'>('main');
+  const [isEditingRoomName, setIsEditingRoomName] = useState(false);
+  const [editingRoomName, setEditingRoomName] = useState('');
+    // Avatar management states
+  const [userAvatar, setUserAvatar] = useState<string>('');
+  const [selectedAvatarOption, setSelectedAvatarOption] = useState<string>('default');  // Initialize room name and visibility
+  useEffect(() => {
+    if (roomId) {
+      // Initialize room visibility
+      const savedVisibility = typeof window !== 'undefined' ? localStorage.getItem(`vh_roomVisibility_${roomId}`) : null;
+      if (savedVisibility === 'Public' || savedVisibility === 'Private') {
+        setRoomVisibility(savedVisibility);
+      }
+
+      // First check localStorage for saved room name
+      const savedRoomName = typeof window !== 'undefined' ? localStorage.getItem(`vh_roomName_${roomId}`) : null;
+      if (savedRoomName) {
+        setRoomName(savedRoomName);
+      } else {
+        // Check Firebase for room data
+        const roomRef = doc(db, 'rooms', roomId);
+        const unsubscribe = onSnapshot(roomRef, (docSnapshot) => {
+          if (docSnapshot.exists()) {
+            const roomData = docSnapshot.data();
+            if (roomData.name) {
+              setRoomName(roomData.name);
+            } else {
+              // Default room name
+              const defaultName = roomId.split(/[-']/)[0] + "'s room";
+              setRoomName(defaultName);
+            }
+            
+            if (roomData.visibility && (roomData.visibility === 'Public' || roomData.visibility === 'Private')) {
+              setRoomVisibility(roomData.visibility);
+            }
+          } else {
+            // Default room name
+            const defaultName = roomId.split(/[-']/)[0] + "'s room";
+            setRoomName(defaultName);
+          }
+        });
+        
+        return () => unsubscribe();
+      }    }
+  }, [roomId]);
+  
+  // Initialize user avatar from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedAvatar = localStorage.getItem('vh_userAvatar');
+      const storedAvatarOption = localStorage.getItem('vh_avatarOption');
+      if (storedAvatar) {
+        setUserAvatar(storedAvatar);
+      }
+      if (storedAvatarOption) {
+        setSelectedAvatarOption(storedAvatarOption);
+      }
+    }
+  }, []);
+  
+  // Predefined background themes
+  const backgroundThemes = {
+    default: {
+      name: 'Default',
+      image: null as string | null,
+      preview: '#1a1a1a'
+    },
+    space: {
+      name: 'Space',
+      image: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?ixlib=rb-4.0.3&auto=format&fit=crop&w=2013&q=80',
+      preview: '#0f1419'
+    },
+    galaxy: {
+      name: 'Galaxy',
+      image: 'https://images.unsplash.com/photo-1446776877081-d282a0f896e2?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80',
+      preview: '#1a0f2e'
+    },
+    abstract: {
+      name: 'Abstract',
+      image: 'https://images.unsplash.com/photo-1557683316-973673baf926?ixlib=rb-4.0.3&auto=format&fit=crop&w=2029&q=80',
+      preview: '#2d1b3d'
+    },
+    minimal: {
+      name: 'Minimal',
+      image: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80',
+      preview: '#f8f9fa'
+    },
+    ocean: {
+      name: 'Ocean',
+      image: 'https://images.unsplash.com/photo-1439066615861-d1af74d74000?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80',
+      preview: '#0c4a6e'
+    },
+    forest: {
+      name: 'Forest',
+      image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80',
+      preview: '#134e4a'
+    },
+    sunset: {
+      name: 'Sunset',
+      image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80',
+      preview: '#ea580c'
+    }
+  } as const;
+
+  // Predefined avatar options
+  const avatarOptions = {
+    default: {
+      name: 'Default',
+      url: null,
+      color: '#6366f1'
+    },
+    avatar1: {
+      name: 'Professional',
+      url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
+      color: '#3b82f6'
+    },
+    avatar2: {
+      name: 'Creative',
+      url: 'https://images.unsplash.com/photo-1494790108755-2616b612b142?w=150&h=150&fit=crop&crop=face',
+      color: '#ec4899'
+    },
+    avatar3: {
+      name: 'Casual',
+      url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+      color: '#10b981'
+    },
+    avatar4: {
+      name: 'Modern',
+      url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
+      color: '#f59e0b'
+    },
+    avatar5: {
+      name: 'Stylish',
+      url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face',
+      color: '#8b5cf6'
+    },
+    avatar6: {
+      name: 'Friendly',
+      url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop&crop=face',
+      color: '#ef4444'
+    }
+  } as const;
 
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
 
@@ -609,16 +767,22 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       getLivekitToken();
     }
   }, [userName, roomId, isHost, getLivekitToken]);
-
   // Add current user to the room's participants list
   useEffect(() => {
     if (!userName) return;
     
     const userRef = doc(db, 'rooms', roomId, 'participants', `${userName}_${isHost ? 'host' : 'guest'}_${roomId}`);
+    
+    // Use custom avatar if available, otherwise fall back to default
+    let avatarUrl = userAvatar;
+    if (!avatarUrl || avatarUrl === '') {
+      avatarUrl = `https://placehold.co/80x80.png?text=${userName.charAt(0).toUpperCase()}`;
+    }
+    
     const userData = {
       id: `${userName}_${isHost ? 'host' : 'guest'}_${roomId}`,
       name: userName,
-      avatarUrl: `https://placehold.co/80x80.png?text=${userName.charAt(0).toUpperCase()}`,
+      avatarUrl: avatarUrl,
       hint: 'person avatar',
       isHost: isHost
     };
@@ -634,8 +798,30 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     return () => {
       deleteDoc(userRef);
       unsub();
-    };
-  }, [roomId, userName, isHost]);
+    };  }, [roomId, userName, isHost, userAvatar]);
+
+  // Update public room listing when participants change
+  useEffect(() => {
+    if (roomVisibility === 'Public' && allParticipants.length > 0) {
+      const updatePublicRoom = async () => {
+        try {
+          const publicRoomRef = doc(db, 'publicRooms', roomId);
+          await setDoc(publicRoomRef, {
+            id: roomId,
+            name: roomName,
+            visibility: 'Public',
+            participantCount: allParticipants.length,
+            updatedAt: new Date(),
+            hostName: userName
+          }, { merge: true });
+        } catch (error) {
+          console.error("Error updating public room:", error);
+        }
+      };
+      
+      updatePublicRoom();
+    }
+  }, [allParticipants, roomVisibility, roomId, userName, roomName]);
 
   // Add useEffect for real-time message updates
   useEffect(() => {
@@ -662,21 +848,25 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || !userName) return;
 
     try {
       const messageRef = doc(collection(db, 'rooms', roomId, 'messages'));
-      const userAvatar = `https://placehold.co/40x40.png?text=${userName.charAt(0).toUpperCase()}`;
+      
+      // Use custom avatar if available, otherwise fall back to default
+      let messageAvatar = userAvatar;
+      if (!messageAvatar || messageAvatar === '') {
+        messageAvatar = `https://placehold.co/40x40.png?text=${userName.charAt(0).toUpperCase()}`;
+      }
       
       await setDoc(messageRef, {
         id: messageRef.id,
         user: userName,
         text: chatInput.trim(),
         timestamp: new Date(),
-        avatar: userAvatar
+        avatar: messageAvatar
       });
 
       setChatInput('');
@@ -688,7 +878,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         description: "Failed to send message. Please try again.",
       });
     }
-  };  const getYouTubeEmbedUrl = (url: string): string | null => {
+  };const getYouTubeEmbedUrl = (url: string): string | null => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     if (match && match[2].length === 11) {
@@ -1515,6 +1705,191 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         localStorage.setItem('vh_userName', nameInput.trim());
       }
       setIsNamePromptOpen(false);
+    }  };
+
+  // Avatar handling functions
+  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        toast({
+          variant: "destructive",
+          title: "File too large",
+          description: "Please select an image smaller than 5MB.",
+        });
+        return;
+      }
+
+      if (!file.type.startsWith('image/')) {
+        toast({
+          variant: "destructive",
+          title: "Invalid file type",
+          description: "Please select an image file.",
+        });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        setUserAvatar(result);
+        setSelectedAvatarOption('custom');
+        
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('vh_userAvatar', result);
+          localStorage.setItem('vh_avatarOption', 'custom');
+        }
+        
+        toast({
+          title: "Avatar updated",
+          description: "Your avatar has been updated successfully.",
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+    // Reset the input
+    event.target.value = '';
+  };
+
+  const handleAvatarSelect = (optionKey: string) => {
+    setSelectedAvatarOption(optionKey);
+    
+    if (optionKey === 'default') {
+      setUserAvatar('');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('vh_userAvatar');
+        localStorage.setItem('vh_avatarOption', 'default');
+      }
+    } else if (optionKey !== 'custom') {
+      const selectedOption = avatarOptions[optionKey as keyof typeof avatarOptions];
+      if (selectedOption && selectedOption.url) {
+        setUserAvatar(selectedOption.url);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('vh_userAvatar', selectedOption.url);
+          localStorage.setItem('vh_avatarOption', optionKey);
+        }
+      }
+    }
+    
+    toast({
+      title: "Avatar updated",
+      description: "Your avatar has been updated successfully.",
+    });
+  };
+
+  const getCurrentAvatarUrl = () => {
+    if (userAvatar && userAvatar !== '') {
+      return userAvatar;
+    }    return `https://placehold.co/80x80.png?text=${userName.charAt(0).toUpperCase()}`;
+  };
+  // Handle room settings modal state
+  const handleRoomSettingsOpen = (view: 'main' | 'appearance' | 'avatar' | 'roomname' = 'main') => {
+    setRoomSettingsView(view);
+    setIsRoomSettingsOpen(true);
+  };
+  const handleRoomSettingsClose = () => {
+    setIsRoomSettingsOpen(false);
+    setRoomSettingsView('main');
+    setIsEditingRoomName(false);
+    setEditingRoomName('');
+  };
+
+  // Room name editing functions
+  const handleEditRoomName = () => {
+    setEditingRoomName(roomName);
+    setIsEditingRoomName(true);
+  };
+
+  const handleSaveRoomName = async () => {
+    if (editingRoomName.trim() && editingRoomName.trim() !== roomName) {
+      try {
+        // Save to Firebase
+        const roomRef = doc(db, 'rooms', roomId);
+        await setDoc(roomRef, { 
+          name: editingRoomName.trim(),
+          updatedAt: new Date()
+        }, { merge: true });
+
+        // Update local state
+        setRoomName(editingRoomName.trim());
+        
+        // Save to localStorage
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`vh_roomName_${roomId}`, editingRoomName.trim());
+        }
+
+        toast({
+          title: "Room name updated",
+          description: "The room name has been updated successfully.",
+        });
+      } catch (error) {
+        console.error("Error updating room name:", error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to update room name. Please try again.",
+        });
+      }
+    }
+    setIsEditingRoomName(false);
+    setEditingRoomName('');
+  };
+  const handleCancelEditRoomName = () => {
+    setIsEditingRoomName(false);
+    setEditingRoomName('');
+  };
+  // Room visibility toggle function
+  const handleToggleVisibility = async () => {
+    const newVisibility = roomVisibility === 'Private' ? 'Public' : 'Private';
+    
+    try {
+      // Save to Firebase
+      const roomRef = doc(db, 'rooms', roomId);
+      await setDoc(roomRef, { 
+        visibility: newVisibility,
+        updatedAt: new Date(),
+        name: roomName,
+        createdAt: new Date(), // Add creation date for public listings
+        participantCount: allParticipants.length
+      }, { merge: true });
+
+      // If making room public, add to public rooms collection
+      if (newVisibility === 'Public') {
+        const publicRoomRef = doc(db, 'publicRooms', roomId);
+        await setDoc(publicRoomRef, {
+          id: roomId,
+          name: roomName,
+          visibility: 'Public',
+          participantCount: allParticipants.length,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          hostName: userName
+        });
+      } else {
+        // If making room private, remove from public rooms collection
+        const publicRoomRef = doc(db, 'publicRooms', roomId);
+        await deleteDoc(publicRoomRef);
+      }
+
+      // Update local state
+      setRoomVisibility(newVisibility);
+      
+      // Save to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`vh_roomVisibility_${roomId}`, newVisibility);
+      }
+
+      toast({
+        title: "Room visibility updated",
+        description: `Room is now ${newVisibility.toLowerCase()}. ${newVisibility === 'Public' ? 'Anyone can find and join this room from the public lobby.' : 'Only people with the link can join.'}`,
+      });
+    } catch (error) {
+      console.error("Error updating room visibility:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update room visibility. Please try again.",
+      });
     }
   };
 
@@ -1751,14 +2126,27 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right"><p>Add Content</p></TooltipContent>
-          </Tooltip>
-          <Tooltip>
+          </Tooltip>          <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
                 <Globe className="h-6 w-6" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right"><p>Explore Rooms</p></TooltipContent>
+          </Tooltip>
+          
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-muted-foreground hover:text-primary"
+                onClick={() => setIsThemeModalOpen(true)}
+              >
+                <Settings2 className="h-6 w-6" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right"><p>Change Theme</p></TooltipContent>
           </Tooltip>
           
           {/* Connection Status Indicator at bottom */}
@@ -1783,29 +2171,32 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         </aside>
 
         {/* Main Area Container */}
-        <div className="flex-1 flex flex-col">
-          {/* Top Bar */}
-          <header className="p-3 flex justify-between items-center border-b border-border bg-card/50 backdrop-blur-sm">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="text-lg font-semibold hover:bg-primary/10">
-                  {roomId.split(/[-']/)[0]}'s room
-                  <ChevronDown className="h-5 w-5 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem>Room Settings</DropdownMenuItem>
-                <DropdownMenuItem>Room ID - {roomId}</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <div className="flex items-center gap-2">
+        <div className="flex-1 flex flex-col">          {/* Top Bar */}
+          <header className="p-3 flex justify-center items-center border-b border-border bg-card/50 backdrop-blur-sm relative">
+            {/* Left side spacer for symmetry */}
+            <div className="absolute left-3 flex items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon"><Bell className="h-5 w-5" /></Button>
                 </TooltipTrigger>
                 <TooltipContent><p>Notifications</p></TooltipContent>
               </Tooltip>
+            </div>
+            
+            {/* Centered room name */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="text-lg font-semibold hover:bg-primary/10">
+                  {roomId.split(/[-']/)[0]}'s room
+                  <ChevronDown className="h-5 w-5 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>              <DropdownMenuContent>                <DropdownMenuItem onClick={() => handleRoomSettingsOpen()}>
+                  Room Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem>Room ID - {roomId}</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>            {/* Right side controls */}
+            <div className="absolute right-3 flex items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" onClick={() => setIsParticipantsOpen(true)}>
@@ -1830,16 +2221,18 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           </header>          {/* Content Area */}          <main 
             className="flex-1 flex flex-col items-center justify-start p-9 p-4 bg-background relative" 
             ref={mainMediaContainerRef}
-            style={{
-              backgroundImage: "url('https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2013&q=80')",
+            style={backgroundThemes[selectedTheme].image ? {
+              backgroundImage: `url('${backgroundThemes[selectedTheme].image}')`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
               backgroundRepeat: 'no-repeat',
               backgroundAttachment: 'fixed'
-            }}
+            } : {}}
           >
-            {/* Background overlay for better contrast */}
-            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm"></div>
+            {/* Background overlay for better contrast - only show when there's a background image */}
+            {backgroundThemes[selectedTheme].image && (
+              <div className="absolute inset-0 bg-black/20 backdrop-blur-sm"></div>
+            )}
             
             <div 
               ref={videoContainerRef}
@@ -1876,6 +2269,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               {isMediaActive && (
                 <div 
                   className={cn(
+                   
                     "absolute bottom-0 left-0 right-0 bg-black/40 backdrop-blur-sm p-2 rounded-b-lg transition-all duration-300 hover:bg-black/60 flex flex-col gap-1.5",
                     showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
                   )}
@@ -2308,6 +2702,367 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               <Button type="submit" className="w-full">Join Room</Button>
             </form>          </DialogContent>
         </Dialog>
+
+        {/* Theme Selection Modal */}
+        <Dialog open={isThemeModalOpen} onOpenChange={setIsThemeModalOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Choose Background Theme</DialogTitle>
+              <p className="text-sm text-muted-foreground">Select a background theme for your room</p>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              {Object.entries(backgroundThemes).map(([key, theme]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setSelectedTheme(key as keyof typeof backgroundThemes);
+                    setIsThemeModalOpen(false);
+                  }}
+                  className={cn(
+                    "relative aspect-video rounded-lg border-2 overflow-hidden transition-all hover:scale-105",
+                    selectedTheme === key 
+                      ? "border-primary ring-2 ring-primary/20" 
+                      : "border-border hover:border-primary/50"
+                  )}
+                >
+                  <div 
+                    className="w-full h-full flex items-center justify-center text-sm font-medium text-white"
+                    style={{
+                      backgroundColor: theme.preview,
+                      backgroundImage: theme.image ? `url('${theme.image}')` : 'none',
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center'
+                    }}
+                  >
+                    {!theme.image && (
+                      <span className="bg-black/20 px-2 py-1 rounded">{theme.name}</span>
+                    )}
+                  </div>
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 text-center">
+                    {theme.name}
+                  </div>
+                  {selectedTheme === key && (
+                    <div className="absolute top-1 right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </DialogContent>        </Dialog>        {/* Room Settings Modal */}
+        <Dialog open={isRoomSettingsOpen} onOpenChange={handleRoomSettingsClose}>
+          <DialogContent className="max-w-md p-0 gap-0 bg-card/95 backdrop-blur-md border-border">
+            <DialogHeader className="p-6 pb-4">
+              <div className="flex items-center gap-3">
+                {roomSettingsView !== 'main' && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setRoomSettingsView('main')}
+                    className="h-8 w-8"
+                  >
+                    <ChevronRight className="h-4 w-4 rotate-180" />
+                  </Button>
+                )}                <DialogTitle className="text-foreground text-xl font-semibold">
+                  {roomSettingsView === 'main' && 'Room Settings'}
+                  {roomSettingsView === 'appearance' && 'Choose Background'}
+                  {roomSettingsView === 'avatar' && 'Choose Avatar'}
+                  {roomSettingsView === 'roomname' && 'Edit Room Name'}
+                </DialogTitle>
+              </div>
+              {roomSettingsView === 'appearance' && (
+                <DialogDescription className="text-muted-foreground ml-11">
+                  Select a background theme for your room
+                </DialogDescription>
+              )}
+            </DialogHeader>
+            
+            <div className="px-6 pb-6">
+              {roomSettingsView === 'main' && (
+                <div className="space-y-3">
+                  {/* Avatar Section */}
+                  <div 
+                    className="bg-muted/50 hover:bg-muted transition-colors rounded-lg p-4 flex items-center justify-between cursor-pointer group"
+                    onClick={() => setRoomSettingsView('avatar')}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <User className="h-5 w-5 text-primary" />
+                      </div>
+                      <span className="text-foreground font-medium">Avatar</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        {userAvatar && userAvatar !== '' ? (
+                          <img 
+                            src={userAvatar} 
+                            alt="Current avatar" 
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                            <span className="text-primary-foreground text-sm font-bold">
+                              {userName.charAt(0).toUpperCase() || 'T'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    </div>
+                  </div>                  {/* Room Name Section */}
+                  <div className="bg-muted/50 hover:bg-muted transition-colors rounded-lg p-4">
+                    {isEditingRoomName ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-primary/10 rounded-lg">
+                            <Edit3 className="h-5 w-5 text-primary" />
+                          </div>
+                          <span className="text-foreground font-medium">Edit Room Name</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={editingRoomName}
+                            onChange={(e) => setEditingRoomName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleSaveRoomName();
+                              } else if (e.key === 'Escape') {
+                                handleCancelEditRoomName();
+                              }
+                            }}
+                            placeholder="Enter room name"
+                            className="flex-1"
+                            autoFocus
+                          />
+                          <Button
+                            size="sm"
+                            onClick={handleSaveRoomName}
+                            disabled={!editingRoomName.trim() || editingRoomName.trim() === roomName}
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleCancelEditRoomName}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between cursor-pointer group" onClick={handleEditRoomName}>
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-primary/10 rounded-lg">
+                            <Edit3 className="h-5 w-5 text-primary" />
+                          </div>
+                          <span className="text-foreground font-medium">Room name</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground text-sm max-w-32 truncate">
+                            {roomName}
+                          </span>
+                          <Edit className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Appearance Section */}
+                  <div 
+                    className="bg-muted/50 hover:bg-muted transition-colors rounded-lg p-4 flex items-center justify-between cursor-pointer group"
+                    onClick={() => setRoomSettingsView('appearance')}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Palette className="h-5 w-5 text-primary" />
+                      </div>
+                      <span className="text-foreground font-medium">Appearance</span>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  </div>                  {/* Visibility Section */}
+                  <div 
+                    className="bg-muted/50 hover:bg-muted transition-colors rounded-lg p-4 flex items-center justify-between cursor-pointer group"
+                    onClick={handleToggleVisibility}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        {roomVisibility === 'Private' ? (
+                          <EyeOff className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Eye className="h-5 w-5 text-primary" />
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-foreground font-medium">Visibility</span>
+                        <span className="text-xs text-muted-foreground">
+                          {roomVisibility === 'Private' 
+                            ? 'Only people with the link can join' 
+                            : 'Anyone can find and join this room'
+                          }
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        roomVisibility === 'Private' 
+                          ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                          : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                      }`}>
+                        {roomVisibility}
+                      </div>
+                      <div className={`w-10 h-6 rounded-full transition-colors ${
+                        roomVisibility === 'Public' ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                      } relative`}>
+                        <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                          roomVisibility === 'Public' ? 'translate-x-5' : 'translate-x-1'
+                        }`} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Security Section */}
+                  <div className="bg-muted/50 hover:bg-muted transition-colors rounded-lg p-4 flex items-center justify-between cursor-pointer group">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Shield className="h-5 w-5 text-primary" />
+                      </div>
+                      <span className="text-foreground font-medium">Security</span>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  </div>
+                </div>
+              )}
+
+              {roomSettingsView === 'appearance' && (
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.entries(backgroundThemes).map(([key, theme]) => (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        setSelectedTheme(key as keyof typeof backgroundThemes);
+                        setRoomSettingsView('main');
+                      }}
+                      className={cn(
+                        "relative aspect-video rounded-lg border-2 overflow-hidden transition-all hover:scale-105",
+                        selectedTheme === key 
+                          ? "border-primary ring-2 ring-primary/20" 
+                          : "border-border hover:border-primary/50"
+                      )}
+                    >
+                      <div 
+                        className="w-full h-full flex items-center justify-center text-sm font-medium text-white"
+                        style={{
+                          backgroundColor: theme.preview,
+                          backgroundImage: theme.image ? `url('${theme.image}')` : 'none',
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center'
+                        }}
+                      >
+                        {!theme.image && (
+                          <span className="bg-black/20 px-2 py-1 rounded">{theme.name}</span>
+                        )}
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 text-center">
+                        {theme.name}
+                      </div>
+                      {selectedTheme === key && (
+                        <div className="absolute top-1 right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {roomSettingsView === 'avatar' && (
+                <div className="space-y-6">
+                  {/* Current Avatar Preview */}
+                  <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg">
+                    <div className="relative">
+                      {userAvatar && userAvatar !== '' ? (
+                        <img 
+                          src={userAvatar} 
+                          alt="Current avatar" 
+                          className="w-16 h-16 rounded-full object-cover border-2 border-primary"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center border-2 border-primary">
+                          <span className="text-primary-foreground text-lg font-bold">
+                            {userName.charAt(0).toUpperCase() || 'T'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-foreground">{userName}</h3>
+                      <p className="text-sm text-muted-foreground">Current avatar</p>
+                    </div>
+                  </div>
+
+                  {/* Upload Custom Avatar */}
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-foreground">Upload Custom Avatar</h4>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarUpload}
+                        className="hidden"
+                        id="avatar-upload"
+                      />
+                      <label
+                        htmlFor="avatar-upload"
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors cursor-pointer"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload Image
+                      </label>
+                      <span className="text-sm text-muted-foreground">Max 5MB</span>
+                    </div>
+                  </div>
+
+                  {/* Default Avatar Options */}
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-foreground">Default Avatars</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      {Object.entries(avatarOptions).map(([key, option]) => (
+                        <button
+                          key={key}
+                          onClick={() => handleAvatarSelect(key)}
+                          className={cn(
+                            "flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all hover:border-primary/50",
+                            selectedAvatarOption === key
+                              ? "border-primary bg-primary/10"
+                              : "border-border bg-muted/30"
+                          )}
+                        >
+                          {option.url ? (
+                            <img 
+                              src={option.url} 
+                              alt={option.name}
+                              className="w-12 h-12 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div 
+                              className="w-12 h-12 rounded-full flex items-center justify-center"
+                              style={{ backgroundColor: option.color }}
+                            >
+                              <span className="text-white text-lg font-bold">
+                                {userName.charAt(0).toUpperCase() || 'T'}
+                              </span>
+                            </div>
+                          )}
+                          <span className="text-xs text-foreground font-medium">{option.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>        </Dialog>
 
       </div>
     </TooltipProvider>
