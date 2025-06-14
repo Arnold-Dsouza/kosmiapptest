@@ -101,11 +101,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMicOn, setIsMicOn] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
-  
-  const videoRef = useRef<HTMLVideoElement>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
   const mediaFrameRef = useRef<HTMLIFrameElement>(null);
   const placeholderContentRef = useRef<HTMLDivElement>(null);
   const mainMediaContainerRef = useRef<HTMLDivElement>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
   
   const [isSelectMediaModalOpen, setIsSelectMediaModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -121,12 +121,14 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [isScreenShareMuted, setIsScreenShareMuted] = useState(false);
   const [screenShareVolume, setScreenShareVolume] = useState(1); // 0 to 1
   const [previousVolume, setPreviousVolume] = useState(1); // To store volume before mute
-
   const [mediaSourceText, setMediaSourceText] = useState<string | null>(null);
   
   const [videoProgress, setVideoProgress] = useState(0);
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState("00:00");
   const [durationDisplay, setDurationDisplay] = useState("00:00");
+  const [areCaptionsEnabled, setAreCaptionsEnabled] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
 
@@ -583,12 +585,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         description: "Failed to send message. Please try again.",
       });
     }
-  };
-  const getYouTubeEmbedUrl = (url: string): string | null => {
+  };  const getYouTubeEmbedUrl = (url: string): string | null => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     if (match && match[2].length === 11) {
-      return `https://www.youtube.com/embed/${match[2]}?autoplay=1&controls=1&rel=0&showinfo=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}&playsinline=1&fs=1&iv_load_policy=3`;
+      return `https://www.youtube.com/embed/${match[2]}?autoplay=1&controls=1&rel=0&showinfo=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}&playsinline=1&fs=1&iv_load_policy=3&widgetid=1&events=onStateChange&cc_load_policy=0`;
     }
     return null;
   };
@@ -614,10 +615,14 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         // Update UI based on media state
         if (data.url) {
           if (data.isYouTube && mediaFrameRef.current) {
-            const iframe = mediaFrameRef.current;
-            // Set the source first
+            const iframe = mediaFrameRef.current;            // Set the source first
             if (iframe.src !== data.url) {
               iframe.src = data.url;
+              
+              // Initialize YouTube API connection
+              setTimeout(() => {
+                iframe.contentWindow?.postMessage('{"event":"listening","id":"kosmi"}', '*');
+              }, 1000);
             }
             iframe.classList.remove('hidden');
             if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
@@ -720,13 +725,77 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               id: 'volumeListener',
               channel: 'widget'
             }), { targetOrigin: '*' });
-          }else if (data.event === 'infoDelivery' && data.info && data.info.volume !== undefined) {
-            // Handle volume changes from YouTube player
-            const youtubeVolume = data.info.volume / 100; // Convert from 0-100 to 0-1
-            const isMuted = data.info.muted || youtubeVolume === 0;
             
-            setScreenShareVolume(youtubeVolume);
-            setIsScreenShareMuted(isMuted);
+            // Start requesting time updates
+            setTimeout(() => {
+              event.source?.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'getCurrentTime',
+                args: ''
+              }), { targetOrigin: '*' });
+              
+              event.source?.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'getDuration',
+                args: ''
+              }), { targetOrigin: '*' });
+              
+              // Test captions availability
+              console.log('🎬 Testing captions availability...');
+              event.source?.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'getOptions',
+                args: ['captions']
+              }), { targetOrigin: '*' });
+            }, 1000);          } else if (data.event === 'infoDelivery') {
+            if (data.info && data.info.volume !== undefined) {
+              // Handle volume changes from YouTube player
+              const youtubeVolume = data.info.volume / 100; // Convert from 0-100 to 0-1
+              const isMuted = data.info.muted || youtubeVolume === 0;
+              
+              setScreenShareVolume(youtubeVolume);
+              setIsScreenShareMuted(isMuted);
+            }
+            
+            if (data.info && typeof data.info.currentTime === 'number') {
+              // Handle current time updates
+              const currentTime = data.info.currentTime;
+              setCurrentTimeDisplay(formatTime(currentTime));
+              
+              if (typeof data.info.duration === 'number') {
+                const duration = data.info.duration;
+                setDurationDisplay(formatTime(duration));
+                const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+                setVideoProgress(progress);
+              }
+            }
+            
+            if (data.info && typeof data.info.duration === 'number') {
+              // Handle duration-only updates
+              const duration = data.info.duration;
+              setDurationDisplay(formatTime(duration));
+            }
+          } else if (data.info && typeof data.info === 'number') {
+            // Handle direct number responses (getCurrentTime and getDuration responses)
+            if (data.event === 'getCurrentTime') {
+              const currentTime = data.info;
+              setCurrentTimeDisplay(formatTime(currentTime));
+            } else if (data.event === 'getDuration') {
+              const duration = data.info;
+              setDurationDisplay(formatTime(duration));
+            }
+          } else if (data.event === 'command' && data.info) {
+            // Handle command responses (including captions)
+            console.log('🎬 YouTube command response:', data);
+            
+            // Check for captions module status
+            if (data.func === 'loadModule' && data.args && data.args[0] === 'captions') {
+              console.log('🎬 Captions module loaded successfully');
+              setAreCaptionsEnabled(true);
+            } else if (data.func === 'unloadModule' && data.args && data.args[0] === 'captions') {
+              console.log('🎬 Captions module unloaded successfully');
+              setAreCaptionsEnabled(false);
+            }
           }
         } catch (e) {
           // Not a JSON message
@@ -780,13 +849,64 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       ...mediaState,
       isPlaying: newIsPlaying
     }, { merge: true });
-  };
-
-  // Single handleProgressChange function with sync functionality
+  };  // Single handleProgressChange function with sync functionality
   const handleProgressChange = async (value: number[]) => {
     if (!isHost) return; // Only host can control seeking
     
-    if (videoRef.current && screenStreamRef.current && isFinite(videoRef.current.duration)) {
+    if (isYouTubeVideo && mediaFrameRef.current) {
+      // Handle YouTube video seeking
+      // First explicitly request the duration to ensure we have accurate data
+      mediaFrameRef.current.contentWindow?.postMessage(JSON.stringify({
+        event: 'command',
+        func: 'getDuration',
+        args: []
+      }), '*');
+      
+      // Need a small delay to ensure we've received duration response
+      setTimeout(() => {
+        let duration = 0;
+        
+        // Try to parse duration from display
+        const durationParts = durationDisplay.split(':').map(part => parseInt(part, 10));
+        if (durationParts.length === 2) {
+          duration = durationParts[0] * 60 + durationParts[1]; // mm:ss
+        } else if (durationParts.length === 3) {
+          duration = durationParts[0] * 3600 + durationParts[1] * 60 + durationParts[2]; // hh:mm:ss
+        }
+        
+        console.log(`🎯 Seeking YouTube video. Progress: ${value[0]}%, Duration: ${duration}s`);
+        
+        if (duration > 0) {
+          const newTime = Math.floor((value[0] / 100) * duration);
+          console.log(`🎯 Seeking to ${newTime}s (${formatTime(newTime)})`);
+          
+          // Using setTimeout ensures better communication with YouTube iframe
+          setTimeout(() => {
+            if (mediaFrameRef.current) {
+              mediaFrameRef.current.contentWindow?.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'seekTo',
+                args: [newTime, true]
+              }), '*');
+            }
+          }, 50);
+          
+          // Update UI immediately for better perceived performance
+          setCurrentTimeDisplay(formatTime(newTime));
+          setVideoProgress(value[0]);
+          
+          // Sync seek position
+          const mediaStateRef = doc(db, 'rooms', roomId, 'media', 'state');
+          setDoc(mediaStateRef, {
+            ...mediaState,
+            currentTime: newTime
+          }, { merge: true });
+        } else {
+          console.warn("⚠️ Could not determine YouTube video duration for seeking");
+        }
+      }, 100);
+    } else if (videoRef.current && screenStreamRef.current && isFinite(videoRef.current.duration)) {
+      // Handle regular video seeking
       const newTime = (value[0] / 100) * videoRef.current.duration;
       videoRef.current.currentTime = newTime;
       setCurrentTimeDisplay(formatTime(newTime));
@@ -800,7 +920,6 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       }, { merge: true });
     }
   };
-
   // Update handlePlayUrl to include initial control state
   const handlePlayUrl = async (url: string) => {
     if (screenStreamRef.current) {
@@ -813,12 +932,27 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       setCurrentMediaUrl(embedUrl);
       setIsYouTubeVideo(true);
       if (mediaFrameRef.current) {
-        mediaFrameRef.current.src = embedUrl;
-        mediaFrameRef.current.classList.remove('hidden');
-      }
+        // Clear any existing content
+        mediaFrameRef.current.src = 'about:blank';
+        
+        // Set new URL after a short delay to ensure clean initialization
+        setTimeout(() => {
+          if (mediaFrameRef.current) {
+            mediaFrameRef.current.src = embedUrl;
+            mediaFrameRef.current.classList.remove('hidden');
+            
+            // Initialize YouTube API after iframe loads
+            mediaFrameRef.current.onload = () => {
+              console.log("🎬 YouTube iframe loaded, initializing API");
+              setTimeout(() => {
+                mediaFrameRef.current?.contentWindow?.postMessage('{"event":"listening","id":"kosmi"}', '*');
+              }, 500);
+            };
+          }
+        }, 50);      }
       if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
       if (videoRef.current) videoRef.current.classList.add('hidden');
-      setMediaSourceText("youtube.com");
+      setMediaSourceText(null);
 
       // Update Firebase state if host
       if (isHost) {
@@ -826,7 +960,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         await setDoc(mediaStateRef, {
           url: embedUrl,
           isYouTube: true,
-          sourceText: "youtube.com",
+          sourceText: null,
           isPlaying: true,
           currentTime: 0,
           duration: 0
@@ -1082,11 +1216,70 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       videoRef.current.muted = newVolume === 0;
       // State updates (screenShareVolume, isScreenShareMuted) are handled by the 'volumechange' event listener
     }
+  };  // Handler to toggle YouTube captions
+  const handleToggleCaptions = () => {
+    if (!isYouTubeVideo || !mediaFrameRef.current) return;
+    const iframe = mediaFrameRef.current;
+    
+    console.log('🎬 Toggling captions. Current state:', areCaptionsEnabled);
+    
+    if (!areCaptionsEnabled) {
+      // Turn ON captions - try multiple methods
+      console.log('🎬 Turning ON captions');
+      
+      // Method 1: Try using setOption for captions
+      iframe.contentWindow?.postMessage(JSON.stringify({
+        event: 'command',
+        func: 'setOption',
+        args: ['captions', 'track', {'languageCode': 'en'}]
+      }), '*');
+      
+      // Method 2: loadModule approach
+      iframe.contentWindow?.postMessage(JSON.stringify({
+        event: 'command',
+        func: 'loadModule',
+        args: ['captions']
+      }), '*');
+      
+      // Method 3: Try setting cc options
+      iframe.contentWindow?.postMessage(JSON.stringify({
+        event: 'command',
+        func: 'setOption',
+        args: ['cc', 'fontSize', 1]
+      }), '*');
+      
+      // Method 4: Try enabling through cc_load_policy simulation
+      iframe.contentWindow?.postMessage(JSON.stringify({
+        event: 'command', 
+        func: 'setOption',
+        args: ['cc', 'displaySettings', {'windowColor': 0, 'windowOpacity': 0}]
+      }), '*');
+      
+      setAreCaptionsEnabled(true);
+    } else {
+      // Turn OFF captions
+      console.log('🎬 Turning OFF captions');
+      
+      // Method 1: unloadModule
+      iframe.contentWindow?.postMessage(JSON.stringify({
+        event: 'command',
+        func: 'unloadModule',
+        args: ['captions']
+      }), '*');
+      
+      // Method 2: setOption to disable
+      iframe.contentWindow?.postMessage(JSON.stringify({
+        event: 'command',
+        func: 'setOption',
+        args: ['captions', 'track', {}]
+      }), '*');
+      
+      setAreCaptionsEnabled(false);
+    }
   };
-
-
   const handleToggleFullscreen = () => {
-    const elem = mainMediaContainerRef.current;
+    // When media is active, use the video container for fullscreen
+    const elem = isMediaActive ? videoContainerRef.current : mainMediaContainerRef.current;
     if (!elem) return;
 
     if (!document.fullscreenElement) {
@@ -1098,8 +1291,89 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     }
   };
 
+  // Controls auto-hide functionality
+  const resetControlsTimer = () => {
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    setShowControls(true);
+    controlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+  };
+
+  const handleMouseEnter = () => {
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    setShowControls(true);
+  };
+
+  const handleMouseLeave = () => {
+    resetControlsTimer();
+  };
+
+  const handleMouseMove = () => {
+    resetControlsTimer();
+  };
+
   const isMediaActive = !!(currentMediaUrl || screenStreamRef.current);
   const isScreenShareActive = !!screenStreamRef.current;
+
+  // Reset captions state when media changes
+  useEffect(() => {
+    setAreCaptionsEnabled(false);
+  }, [currentMediaUrl, isYouTubeVideo]);
+
+  // Initialize controls timer when media becomes active
+  useEffect(() => {
+    if (isMediaActive) {
+      resetControlsTimer();
+    } else {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+      setShowControls(true);
+    }
+    
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, [isMediaActive]);
+
+  // Handle fullscreen state changes for proper video container styling
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const videoContainer = videoContainerRef.current;
+      if (!videoContainer) return;
+
+      if (document.fullscreenElement === videoContainer) {
+        // In fullscreen mode - make video container fill the screen
+        videoContainer.style.width = '100vw';
+        videoContainer.style.height = '100vh';
+        videoContainer.style.maxWidth = 'none';
+        videoContainer.style.aspectRatio = 'unset';
+        videoContainer.style.borderRadius = '0';
+        videoContainer.style.border = 'none';
+      } else {
+        // Exit fullscreen - restore original styles
+        videoContainer.style.width = '';
+        videoContainer.style.height = '';
+        videoContainer.style.maxWidth = '';
+        videoContainer.style.aspectRatio = '';
+        videoContainer.style.borderRadius = '';
+        videoContainer.style.border = '';
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   // Check if user is the first participant and set up initial state
   useEffect(() => {
@@ -1279,6 +1553,70 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     }
     setIsMicOn(!isMicOn);
   };
+  // YouTube Time Tracking with direct API approach
+  useEffect(() => {
+    if (!isYouTubeVideo || !mediaFrameRef.current) return;
+    
+    console.log("🕒 Setting up YouTube time tracking");
+
+    // Function to get current time from YouTube iframe
+    const requestYouTubeTimeUpdate = () => {
+      if (!mediaFrameRef.current?.contentWindow) return;
+      
+      try {
+        // Try all possible methods to ensure we get time updates
+        
+        // Method 1: Direct postMessage command
+        mediaFrameRef.current.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'getCurrentTime',
+          args: []
+        }), '*');
+        
+        mediaFrameRef.current.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'getDuration',
+          args: []
+        }), '*');
+        
+        // Method 2: Get player info
+        mediaFrameRef.current.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'getVideoStats', 
+          args: []
+        }), '*');
+        
+        // Method 3: Try directly requesting player state (triggers info delivery)
+        mediaFrameRef.current.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'getPlayerState',
+          args: []
+        }), '*');
+      } catch (e) {
+        console.error("Error requesting YouTube time update:", e);
+      }
+    };
+    
+    // Initial request with slight delay to ensure iframe is fully loaded
+    const initialTimeoutId = setTimeout(() => {
+      // Initialize API
+      if (mediaFrameRef.current?.contentWindow) {
+        mediaFrameRef.current.contentWindow.postMessage('{"event":"listening","id":"kosmi"}', '*');
+      }
+      
+      // Wait a bit more, then request time updates
+      setTimeout(requestYouTubeTimeUpdate, 500);
+    }, 1000);
+    
+    // Set up recurring time updates - updating every 250ms for smoother progress
+    const timeUpdateIntervalId = setInterval(requestYouTubeTimeUpdate, 250);
+    
+    return () => {
+      clearTimeout(initialTimeoutId);
+      clearInterval(timeUpdateIntervalId);
+    };
+  }, [isYouTubeVideo]);
+
   // Prevent hydration mismatch by only rendering after hydration
   if (!isHydrated) {
     return (
@@ -1368,7 +1706,12 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </Button>
             </div>
           </header>          {/* Content Area */}          <main className="flex-1 flex flex-col items-center justify-center p-4 bg-background" ref={mainMediaContainerRef}>
-            <div className="w-full max-w-4xl aspect-[16/9] bg-black rounded-lg shadow-2xl relative border border-border overflow-hidden">
+            <div 
+              ref={videoContainerRef}
+              className="w-full max-w-4xl aspect-[16/9] bg-black rounded-lg shadow-2xl relative border border-border overflow-hidden"
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            >
               <video 
                 ref={videoRef} 
                 className="absolute inset-0 w-full h-full rounded-md hidden" 
@@ -1394,128 +1737,135 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     <PlaySquare className="h-6 w-6 mr-2" /> Select Media
                  </Button>
                 )}
-                <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>
-              </div>
-            </div>
-
-            {/* Media Control Bar - Positioned below the display */}
-            {isMediaActive && (
-              <div className="w-full max-w-4xl mt-4 bg-black/80 p-2 rounded-lg shadow-xl backdrop-blur-sm flex flex-col gap-1.5">
-                {/* Progress Bar and Time */}
-                <div className="flex items-center gap-2 px-1">
-                  <span className="text-xs text-white w-12 text-center">{currentTimeDisplay}</span>
-                  {isHost && (
-                  <Slider
-                    value={[videoProgress]}
-                    max={100}
-                    step={0.1}
-                    onValueChange={handleProgressChange}
-                    onPointerDown={() => setIsSeeking(true)}
-                    onPointerUp={() => setIsSeeking(false)}
-                    className={cn(
-                      "w-full h-2 cursor-pointer",
-                      "[&>[data-radix-slider-track]]:h-1.5 [&>[data-radix-slider-track]]:bg-gray-600",
-                      "[&>[data-radix-slider-range]]:bg-yellow-400",
-                      "[&>[data-radix-slider-thumb]]:h-3.5 [&>[data-radix-slider-thumb]]:w-3.5 [&>[data-radix-slider-thumb]]:bg-yellow-400 [&>[data-radix-slider-thumb]]:border-2 [&>[data-radix-slider-thumb]]:border-white [&>[data-radix-slider-thumb]]:shadow",
-                      "[&>[data-radix-slider-thumb]:focus-visible]:ring-yellow-400/50 [&>[data-radix-slider-thumb]:focus-visible]:ring-offset-0"
-                    )}
-                    disabled={!isScreenShareActive || !isFinite(videoRef.current?.duration ?? 0)}
-                  />
+                <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>              </div>              {/* Media Control Bar - Positioned as overlay above YouTube controls */}
+              {isMediaActive && (
+                <div 
+                  className={cn(
+                    "absolute bottom-0 left-0 right-0 bg-black/40 backdrop-blur-sm p-2 rounded-b-lg transition-all duration-300 hover:bg-black/60 flex flex-col gap-1.5",
+                    showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
                   )}
-                  <span className="text-xs text-white w-12 text-center">{durationDisplay}</span>
-                </div>
-                 {/* Media Source Text */}
-                {mediaSourceText && <div className="text-center text-xs text-gray-300 -mt-0.5 mb-0.5">{mediaSourceText}</div>}
-
-                {/* Control Buttons */}
-                <div className="flex justify-between items-center gap-2">
-                  <div className="flex items-center gap-1.5">
+                  onMouseEnter={handleMouseEnter}
+                  onMouseLeave={handleMouseLeave}
+                  onMouseMove={handleMouseMove}
+                >
+                  {/* Progress Bar and Time */}
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="text-xs text-white w-12 text-center">{currentTimeDisplay}</span>
                     {isHost && (
-                      <>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                         <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={() => setIsSelectMediaModalOpen(true)}>
-                           <Menu className="h-5 w-5" />
-                         </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Select Media</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={handleStopMedia}>
-                          <Square className="h-5 w-5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Stop Media</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                            <Button 
-                              variant="default" 
-                              size="icon" 
-                              className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" 
-                              onClick={handlePlayPause} 
-                              disabled={!currentMediaUrl}
-                            >
-                              {mediaState.isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-                        </Button>
-                      </TooltipTrigger>
-                          <TooltipContent><p>{mediaState.isPlaying ? "Pause" : "Play"}</p></TooltipContent>
-                    </Tooltip>                    <Tooltip>
-                      <TooltipTrigger asChild>
-                         <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={toggleScreenShareMute} disabled={!isScreenShareActive && !isYouTubeVideo}>
-                           {isScreenShareMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                         </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>{isScreenShareMuted ? "Unmute" : "Mute"}</p></TooltipContent>
-                    </Tooltip><Slider
-                        value={[screenShareVolume]}
-                        max={1}
-                        step={0.01}
-                        onValueChange={handleVolumeChange}
-                        className={cn(
-                          "w-20 h-2 ml-1",
-                          "[&>[data-radix-slider-track]]:h-1 [&>[data-radix-slider-track]]:bg-gray-500",
-                          "[&>[data-radix-slider-range]]:bg-white",
-                          "[&>[data-radix-slider-thumb]]:h-3 [&>[data-radix-slider-thumb]]:w-3 [&>[data-radix-slider-thumb]]:bg-white [&>[data-radix-slider-thumb]]:border-0 [&>[data-radix-slider-thumb]]:shadow-sm",
-                          "[&>[data-radix-slider-thumb]:focus-visible]:ring-white/50 [&>[data-radix-slider-thumb]:focus-visible]:ring-offset-0"
-                        )}
-                        disabled={(!isScreenShareActive && !isYouTubeVideo) || isScreenShareMuted}
-                      />
-                      </>
+                    <Slider
+                      value={[videoProgress]}
+                      max={100}
+                      step={0.1}
+                      onValueChange={handleProgressChange}
+                      onPointerDown={() => setIsSeeking(true)}
+                      onPointerUp={() => setIsSeeking(false)}
+                      className={cn(
+                        "w-full h-2 cursor-pointer",
+                        "[&>[data-radix-slider-track]]:h-1.5 [&>[data-radix-slider-track]]:bg-gray-600",
+                        "[&>[data-radix-slider-range]]:bg-yellow-400",
+                        "[&>[data-radix-slider-thumb]]:h-3.5 [&>[data-radix-slider-thumb]]:w-3.5 [&>[data-radix-slider-thumb]]:bg-yellow-400 [&>[data-radix-slider-thumb]]:border-2 [&>[data-radix-slider-thumb]]:border-white [&>[data-radix-slider-thumb]]:shadow",
+                        "[&>[data-radix-slider-thumb]:focus-visible]:ring-yellow-400/50 [&>[data-radix-slider-thumb]:focus-visible]:ring-offset-0"
+                      )}
+                      disabled={!isScreenShareActive && !isYouTubeVideo}
+                    />
                     )}
+                    <span className="text-xs text-white w-12 text-center">{durationDisplay}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {isYouTubeVideo && <Youtube className="h-5 w-5 text-red-500 hidden md:inline" />}
-                    <span className="text-xs text-white font-semibold bg-black/30 px-1.5 py-0.5 rounded hidden md:inline">HD</span>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button variant="default" size="icon" className="bg-primary/70 hover:bg-primary/60 text-primary-foreground p-1.5 rounded w-9 h-9" disabled>
-                          <Captions className="h-5 w-5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Captions (Coming Soon)</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button variant="default" size="icon" className="bg-primary/70 hover:bg-primary/60 text-primary-foreground p-1.5 rounded w-9 h-9" disabled>
-                          <Settings2 className="h-5 w-5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Settings (Coming Soon)</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button variant="default" size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground p-1.5 rounded w-9 h-9" onClick={handleToggleFullscreen}>
-                          <Expand className="h-5 w-5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Fullscreen</p></TooltipContent>
-                    </Tooltip>
+                   {/* Media Source Text */}
+                  {mediaSourceText && <div className="text-center text-xs text-gray-300 -mt-0.5 mb-0.5">{mediaSourceText}</div>}
+
+                  {/* Control Buttons */}
+                  <div className="flex justify-between items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      {isHost && (
+                        <>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                           <Button variant="default" size="icon" className="bg-white/20 hover:bg-white/30 text-white p-1.5 rounded w-9 h-9 backdrop-blur-sm" onClick={() => setIsSelectMediaModalOpen(true)}>
+                             <Menu className="h-5 w-5" />
+                           </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Select Media</p></TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="default" size="icon" className="bg-white/20 hover:bg-white/30 text-white p-1.5 rounded w-9 h-9 backdrop-blur-sm" onClick={handleStopMedia}>
+                            <Square className="h-5 w-5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Stop Media</p></TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                           <Button variant="default" size="icon" className="bg-white/20 hover:bg-white/30 text-white p-1.5 rounded w-9 h-9 backdrop-blur-sm" onClick={handlePlayPause} disabled={!currentMediaUrl}>
+                             {mediaState.isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                          </Button>
+                        </TooltipTrigger>
+                            <TooltipContent><p>{mediaState.isPlaying ? "Pause" : "Play"}</p></TooltipContent>
+                      </Tooltip>                      <Tooltip>
+                        <TooltipTrigger asChild>
+                           <Button variant="default" size="icon" className="bg-white/20 hover:bg-white/30 text-white p-1.5 rounded w-9 h-9 backdrop-blur-sm" onClick={toggleScreenShareMute} disabled={!isScreenShareActive && !isYouTubeVideo}>
+                             {isScreenShareMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                           </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>{isScreenShareMuted ? "Unmute" : "Mute"}</p></TooltipContent>
+                      </Tooltip><Slider
+                          value={[screenShareVolume]}
+                          max={1}
+                          step={0.01}
+                          onValueChange={handleVolumeChange}
+                          className={cn(
+                            "w-20 h-2 ml-1",
+                            "[&>[data-radix-slider-track]]:h-1 [&>[data-radix-slider-track]]:bg-gray-500",
+                            "[&>[data-radix-slider-range]]:bg-white",
+                            "[&>[data-radix-slider-thumb]]:h-3 [&>[data-radix-slider-thumb]]:w-3 [&>[data-radix-slider-thumb]]:bg-white [&>[data-radix-slider-thumb]]:border-0 [&>[data-radix-slider-thumb]]:shadow-sm",
+                            "[&>[data-radix-slider-thumb]:focus-visible]:ring-white/50 [&>[data-radix-slider-thumb]:focus-visible]:ring-offset-0"
+                          )}
+                          disabled={(!isScreenShareActive && !isYouTubeVideo) || isScreenShareMuted}
+                        />
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isYouTubeVideo && <Youtube className="h-5 w-5 text-red-500 hidden md:inline" />}
+                      <span className="text-xs text-white font-semibold bg-black/30 px-1.5 py-0.5 rounded hidden md:inline">HD</span>                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="default"
+                            size="icon"
+                            className={cn(
+                              "bg-white/20 hover:bg-white/30 text-white p-1.5 rounded w-9 h-9 backdrop-blur-sm",
+                              areCaptionsEnabled && isYouTubeVideo ? "ring-2 ring-yellow-400 bg-yellow-500/60" : ""
+                            )}
+                            onClick={handleToggleCaptions}
+                            disabled={!isYouTubeVideo}
+                            aria-pressed={areCaptionsEnabled && isYouTubeVideo}
+                          >
+                            <Captions className="h-5 w-5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Captions (CC)</p></TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="default" size="icon" className="bg-white/20 hover:bg-white/30 text-white p-1.5 rounded w-9 h-9 backdrop-blur-sm" disabled>
+                            <Settings2 className="h-5 w-5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Settings (Coming Soon)</p></TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="default" size="icon" className="bg-white/20 hover:bg-white/30 text-white p-1.5 rounded w-9 h-9 backdrop-blur-sm" onClick={handleToggleFullscreen}>
+                            <Expand className="h-5 w-5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Fullscreen</p></TooltipContent>
+                      </Tooltip>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}            </div>
               {/* Participant Avatars */}
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-4/5 md:max-w-3/4 lg:max-w-1/2 h-auto pb-1 pt-2 px-4 bg-muted/30 rounded-t-xl flex justify-center items-end space-x-2 md:space-x-3 shadow-xl backdrop-blur-sm">
               {/* Firebase participants */}
@@ -1570,6 +1920,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                         <div className="relative">                          <Avatar className="h-12 w-12 md:h-16 md:w-16 border-2 border-green-500 ring-2 ring-green-500/50 mb-0.5 hover:scale-110 transition-transform cursor-pointer">
                             <AvatarFallback className="bg-green-100 text-green-700">
                               {(lkParticipant.name || lkParticipant.identity).charAt(0)}
+                           
                             </AvatarFallback>
                           </Avatar>
                           {lkParticipant.screenShareTrack && (
@@ -1611,8 +1962,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 <Button className="w-full mb-3 bg-primary/90 hover:bg-primary">
                   <UserPlus className="h-5 w-5 mr-2" /> Invite Friends
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              </DialogTrigger>              <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Invite to room</DialogTitle>
                 </DialogHeader>
