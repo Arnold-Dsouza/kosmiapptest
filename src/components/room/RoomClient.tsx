@@ -1827,10 +1827,23 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </Link>
               </Button>
             </div>
-          </header>          {/* Content Area */}          <main className="flex-1 flex flex-col items-center justify-start p-9 p-4 bg-background" ref={mainMediaContainerRef}>
+          </header>          {/* Content Area */}          <main 
+            className="flex-1 flex flex-col items-center justify-start p-9 p-4 bg-background relative" 
+            ref={mainMediaContainerRef}
+            style={{
+              backgroundImage: "url('https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2013&q=80')",
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+              backgroundAttachment: 'fixed'
+            }}
+          >
+            {/* Background overlay for better contrast */}
+            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm"></div>
+            
             <div 
               ref={videoContainerRef}
-              className="w-full max-w-2xl aspect-[16/9] bg-black rounded-lg shadow-2xl relative border border-border overflow-hidden"
+              className="w-full max-w-2xl aspect-[16/9] bg-black rounded-lg shadow-2xl relative border border-border overflow-hidden z-10"
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
             >
