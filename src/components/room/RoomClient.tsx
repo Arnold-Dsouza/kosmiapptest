@@ -171,10 +171,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       const savedRoomName = typeof window !== 'undefined' ? localStorage.getItem(`vh_roomName_${roomId}`) : null;
       if (savedRoomName) {
         setRoomName(savedRoomName);
-      } else {
-        // Check Firebase for room data
+      } else {        // Check Firebase for room data
         const roomRef = doc(db, 'rooms', roomId);
-        const unsubscribe = onSnapshot(roomRef, (docSnapshot) => {
+        const unsubscribe = onSnapshot(roomRef, async (docSnapshot) => {
           if (docSnapshot.exists()) {
             const roomData = docSnapshot.data();
             if (roomData.name) {
@@ -183,23 +182,45 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               // Default room name
               const defaultName = roomId.split(/[-']/)[0] + "'s room";
               setRoomName(defaultName);
+              
+              // Save default name to Firebase
+              try {
+                await setDoc(roomRef, { 
+                  name: defaultName,
+                  createdAt: new Date(),
+                  updatedAt: new Date()
+                }, { merge: true });
+              } catch (error) {
+                console.error("Error saving default room name:", error);
+              }
             }
             
             if (roomData.visibility && (roomData.visibility === 'Public' || roomData.visibility === 'Private')) {
               setRoomVisibility(roomData.visibility);
             }
           } else {
-            // Default room name
+            // Default room name for new room
             const defaultName = roomId.split(/[-']/)[0] + "'s room";
             setRoomName(defaultName);
+            
+            // Create room document with default name
+            try {
+              await setDoc(roomRef, {
+                name: defaultName,
+                visibility: 'Private',
+                createdAt: new Date(),
+                updatedAt: new Date()
+              });
+            } catch (error) {
+              console.error("Error creating room document:", error);
+            }
           }
         });
         
         return () => unsubscribe();
       }    }
   }, [roomId]);
-  
-  // Initialize user avatar from localStorage
+    // Initialize user avatar from localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedAvatar = localStorage.getItem('vh_userAvatar');
@@ -212,6 +233,13 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       }
     }
   }, []);
+  
+  // Update document title when room name changes
+  useEffect(() => {
+    if (typeof document !== 'undefined' && roomName) {
+      document.title = `${roomName} - VideoHub`;
+    }
+  }, [roomName]);
   
   // Predefined background themes
   const backgroundThemes = {
@@ -1799,23 +1827,38 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     setEditingRoomName(roomName);
     setIsEditingRoomName(true);
   };
-
   const handleSaveRoomName = async () => {
     if (editingRoomName.trim() && editingRoomName.trim() !== roomName) {
       try {
+        const newRoomName = editingRoomName.trim();
+        
         // Save to Firebase
         const roomRef = doc(db, 'rooms', roomId);
         await setDoc(roomRef, { 
-          name: editingRoomName.trim(),
+          name: newRoomName,
           updatedAt: new Date()
         }, { merge: true });
 
+        // Update public rooms collection if room is public
+        if (roomVisibility === 'Public') {
+          const publicRoomRef = doc(db, 'publicRooms', roomId);
+          await setDoc(publicRoomRef, {
+            name: newRoomName,
+            updatedAt: new Date()
+          }, { merge: true });
+        }
+
         // Update local state
-        setRoomName(editingRoomName.trim());
+        setRoomName(newRoomName);
+        
+        // Update document title
+        if (typeof document !== 'undefined') {
+          document.title = `${newRoomName} - VideoHub`;
+        }
         
         // Save to localStorage
         if (typeof window !== 'undefined') {
-          localStorage.setItem(`vh_roomName_${roomId}`, editingRoomName.trim());
+          localStorage.setItem(`vh_roomName_${roomId}`, newRoomName);
         }
 
         toast({
@@ -2259,17 +2302,14 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 <TooltipContent><p>Notifications</p></TooltipContent>
               </Tooltip>
             </div>
-            
-            {/* Centered room name */}
+              {/* Centered room name */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="text-lg font-semibold hover:bg-primary/10">
-                  {roomId.split(/[-']/)[0]}'s room
+                  {roomName || `${roomId.split(/[-']/)[0]}'s room`}
                   <ChevronDown className="h-5 w-5 ml-1" />
                 </Button>
-              </DropdownMenuTrigger>              <DropdownMenuContent>                <DropdownMenuItem onClick={() => handleRoomSettingsOpen()}>
-                  Room Settings
-                </DropdownMenuItem>
+              </DropdownMenuTrigger><DropdownMenuContent>
                 <DropdownMenuItem>Room ID - {roomId}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>            {/* Right side controls */}
@@ -2554,10 +2594,15 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         <aside className="w-80 lg:w-96 bg-card border-l border-border flex flex-col">
           <div className="p-4 border-b border-border">
             <h2 className="text-xl font-semibold mb-3 flex items-center justify-between font-headline">
-              Room Menu
-              <Tooltip>
+              Room Menu              <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon"><Settings className="h-5 w-5" /></Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => handleRoomSettingsOpen()}
+                  >
+                    <Settings className="h-5 w-5" />
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent><p>Room Settings</p></TooltipContent>
               </Tooltip>
