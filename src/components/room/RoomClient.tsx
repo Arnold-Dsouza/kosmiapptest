@@ -37,8 +37,7 @@ import {
   Captions, // CC icon
   Expand,   // Fullscreen icon
   Youtube, // YouTube icon
-  Crown,
-  User, // User/Avatar icon
+  Crown,  User, // User/Avatar icon
   Edit3, // Edit icon
   Palette, // Appearance icon
   Eye, // Visibility icon
@@ -49,6 +48,8 @@ import {
   Upload, // Upload icon
   Check, // Check icon for save
   Edit, // Edit icon
+  Trash, // Delete icon
+  AlertTriangle, // Warning icon
 } from 'lucide-react';
 import { Track, RemoteTrack, RemoteTrackPublication, RemoteParticipant } from 'livekit-client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -152,7 +153,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [isRoomSettingsOpen, setIsRoomSettingsOpen] = useState(false);
   const [roomVisibility, setRoomVisibility] = useState<'Public' | 'Private'>('Private');
   const [roomName, setRoomName] = useState('');
-  const [roomSettingsView, setRoomSettingsView] = useState<'main' | 'appearance' | 'avatar' | 'roomname'>('main');
+  const [roomSettingsView, setRoomSettingsView] = useState<'main' | 'appearance' | 'avatar' | 'roomname' | 'security'>('main');
   const [isEditingRoomName, setIsEditingRoomName] = useState(false);
   const [editingRoomName, setEditingRoomName] = useState('');
     // Avatar management states
@@ -1781,9 +1782,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     if (userAvatar && userAvatar !== '') {
       return userAvatar;
     }    return `https://placehold.co/80x80.png?text=${userName.charAt(0).toUpperCase()}`;
-  };
-  // Handle room settings modal state
-  const handleRoomSettingsOpen = (view: 'main' | 'appearance' | 'avatar' | 'roomname' = 'main') => {
+  };  // Handle room settings modal state
+  const handleRoomSettingsOpen = (view: 'main' | 'appearance' | 'avatar' | 'roomname' | 'security' = 'main') => {
     setRoomSettingsView(view);
     setIsRoomSettingsOpen(true);
   };
@@ -1889,6 +1889,83 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         variant: "destructive",
         title: "Error",
         description: "Failed to update room visibility. Please try again.",
+      });
+    }  };
+
+  // Security functions
+  const handleClearChatHistory = async () => {
+    try {
+      // Get all messages in the room
+      const messagesRef = collection(db, 'rooms', roomId, 'messages');
+      const snapshot = await getDocs(messagesRef);
+      
+      // Delete all messages
+      const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+
+      // Clear local state
+      setMessages([]);
+
+      toast({
+        title: "Chat history cleared",
+        description: "All chat messages have been permanently deleted.",
+      });
+    } catch (error) {
+      console.error("Error clearing chat history:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to clear chat history. Please try again.",
+      });
+    }
+  };
+
+  const handleDeleteRoom = async () => {
+    try {
+      // Delete all participants
+      const participantsRef = collection(db, 'rooms', roomId, 'participants');
+      const participantsSnapshot = await getDocs(participantsRef);
+      const deleteParticipantsPromises = participantsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deleteParticipantsPromises);
+
+      // Delete all messages
+      const messagesRef = collection(db, 'rooms', roomId, 'messages');
+      const messagesSnapshot = await getDocs(messagesRef);
+      const deleteMessagesPromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deleteMessagesPromises);
+
+      // Delete room from public rooms if it's public
+      if (roomVisibility === 'Public') {
+        const publicRoomRef = doc(db, 'publicRooms', roomId);
+        await deleteDoc(publicRoomRef);
+      }
+
+      // Delete the room document
+      const roomRef = doc(db, 'rooms', roomId);
+      await deleteDoc(roomRef);
+
+      // Clear localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(`vh_roomName_${roomId}`);
+        localStorage.removeItem(`vh_roomVisibility_${roomId}`);
+      }
+
+      toast({
+        title: "Room deleted",
+        description: "The room and all its data have been permanently deleted.",
+      });
+
+      // Redirect to home page
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 2000);
+
+    } catch (error) {
+      console.error("Error deleting room:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete room. Please try again.",
       });
     }
   };
@@ -2768,6 +2845,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   {roomSettingsView === 'appearance' && 'Choose Background'}
                   {roomSettingsView === 'avatar' && 'Choose Avatar'}
                   {roomSettingsView === 'roomname' && 'Edit Room Name'}
+                  {roomSettingsView === 'security' && 'Security Settings'}
                 </DialogTitle>
               </div>
               {roomSettingsView === 'appearance' && (
@@ -2919,10 +2997,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                         }`} />
                       </div>
                     </div>
-                  </div>
-
-                  {/* Security Section */}
-                  <div className="bg-muted/50 hover:bg-muted transition-colors rounded-lg p-4 flex items-center justify-between cursor-pointer group">
+                  </div>                  {/* Security Section */}
+                  <div 
+                    className="bg-muted/50 hover:bg-muted transition-colors rounded-lg p-4 flex items-center justify-between cursor-pointer group"
+                    onClick={() => setRoomSettingsView('security')}
+                  >
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-primary/10 rounded-lg">
                         <Shield className="h-5 w-5 text-primary" />
@@ -3056,9 +3135,76 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                           )}
                           <span className="text-xs text-foreground font-medium">{option.name}</span>
                         </button>
-                      ))}
-                    </div>
+                      ))}                    </div>
                   </div>
+                </div>
+              )}
+
+              {roomSettingsView === 'security' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                      <span className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                        Destructive Actions
+                      </span>
+                    </div>
+                    <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                      These actions cannot be undone. Please proceed with caution.
+                    </p>
+                  </div>
+
+                  {/* Clear Chat History */}
+                  <button
+                    onClick={handleClearChatHistory}
+                    className="w-full bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center justify-between transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg">
+                        <Trash className="h-5 w-5 text-red-600 dark:text-red-400" />
+                      </div>
+                      <div className="text-left">
+                        <span className="text-red-800 dark:text-red-200 font-medium block">
+                          Clear Chat History
+                        </span>
+                        <span className="text-red-600 dark:text-red-400 text-sm">
+                          Delete all chat messages permanently
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-red-500 group-hover:text-red-600 transition-colors" />
+                  </button>
+
+                  {/* Delete Room */}
+                  {isHost && (
+                    <button
+                      onClick={handleDeleteRoom}
+                      className="w-full bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center justify-between transition-colors group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg">
+                          <Trash className="h-5 w-5 text-red-600 dark:text-red-400" />
+                        </div>
+                        <div className="text-left">
+                          <span className="text-red-800 dark:text-red-200 font-medium block">
+                            Delete Room
+                          </span>
+                          <span className="text-red-600 dark:text-red-400 text-sm">
+                            Permanently delete this room and all data
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-red-500 group-hover:text-red-600 transition-colors" />
+                    </button>
+                  )}
+
+                  {!isHost && (
+                    <div className="p-4 bg-muted/30 rounded-lg">
+                      <p className="text-sm text-muted-foreground text-center">
+                        Only the room host can delete the room.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
