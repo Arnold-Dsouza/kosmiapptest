@@ -1,4 +1,3 @@
-
 "use client";
 
 import Image from 'next/image';
@@ -56,7 +55,23 @@ export default function SelectMediaModal({ onShareScreen, onPlayUrl }: SelectMed
     const matchesCategory = item.category.includes(activeCategoryId) || activeCategoryId === 'discover';
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
-  });
+  });  const handleMediaItemClick = (item: typeof mediaItemsData[0]) => {
+    if (item.id === 'minigolf') {
+      // Use the proper embed URL for CrazyGames Mini Golf Club with additional parameters
+      // This format ensures better compatibility with our iframe
+      const crazyGamesEmbedUrl = 'https://www.crazygames.com/embed/mini-golf-club?fullscreen=yes';
+      console.log('Opening Mini Golf Club embed:', crazyGamesEmbedUrl);
+      onPlayUrl(crazyGamesEmbedUrl);
+    } else if (item.id === 'pool') {
+      // Use the proper embed URL for CrazyGames 8 Ball Pool with additional parameters
+      const poolEmbedUrl = 'https://www.crazygames.com/embed/8-ball-pool?fullscreen=yes';
+      console.log('Opening 8 Ball Pool embed:', poolEmbedUrl);
+      onPlayUrl(poolEmbedUrl);
+    } else if (item.type === 'web_embed' || item.type === 'video_catalog' || item.type === 'crazy_game') {
+      // Handle other media types as needed
+      console.log(`Clicked on ${item.name}`);
+    }
+  };
 
   const handleOpenUrl = () => {
     if (urlInput.trim()) {
@@ -209,10 +224,13 @@ export default function SelectMediaModal({ onShareScreen, onPlayUrl }: SelectMed
                   <Card
                     key={item.id}
                     className="overflow-hidden aspect-[16/10] flex flex-col items-center justify-center p-1 md:p-2 bg-secondary/30 hover:shadow-lg transition-shadow cursor-pointer hover:bg-secondary/50 border-border"
-                  >
-                    <div className="relative w-full h-full flex items-center justify-center">
+                    onClick={() => handleMediaItemClick(item)}
+                  >                    <div className="relative w-full h-full flex items-center justify-center">
                        <Image src={item.imageUrl} alt={item.name} width={180} height={108} style={{objectFit: 'contain'}} data-ai-hint={item.hint} className="max-h-full max-w-full" />
                        {item.isPremium && <Gem className="absolute top-1 right-1 h-3 w-3 md:h-4 md:w-4 text-yellow-500 bg-black/50 rounded-full p-0.5" />}
+                    </div>
+                    <div className="mt-1 text-xs md:text-sm font-medium text-center truncate w-full px-1">
+                      {item.name}
                     </div>
                   </Card>
                 ))}

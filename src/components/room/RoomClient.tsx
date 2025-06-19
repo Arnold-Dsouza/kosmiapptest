@@ -1310,17 +1310,19 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         ...mediaState,
         currentTime: newTime
       }, { merge: true });
-    }
-  };
-  // Update handlePlayUrl to include initial control state
+    }  };  // Update handlePlayUrl to include initial control state
   const handlePlayUrl = async (url: string) => {
+    console.log("🌐 Playing URL:", url);
     if (screenStreamRef.current) {
       stopScreenShare();
     }
     
+    // Check if it's a CrazyGames URL
+    const isCrazyGames = url.includes('crazygames.com');
+    
     const embedUrl = getYouTubeEmbedUrl(url);
     if (embedUrl) {
-      // Update local state
+      // Handle YouTube URLs
       setCurrentMediaUrl(embedUrl);
       setIsYouTubeVideo(true);
       if (mediaFrameRef.current) {
@@ -1356,15 +1358,41 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           isPlaying: true,
           currentTime: 0,
           duration: 0
-        });
-      }
-    } else {
+        });      }    } else {
       // For non-YouTube URLs
+      console.log("📱 Loading external URL:", url);
       setCurrentMediaUrl(url);
       setIsYouTubeVideo(false);
+      
       if (mediaFrameRef.current) {
-        mediaFrameRef.current.src = url;
-        mediaFrameRef.current.classList.remove('hidden');
+        // Clear any existing content first
+        mediaFrameRef.current.src = 'about:blank';
+        
+        // For CrazyGames URLs, we need to ensure the iframe has the correct permissions
+        if (url.includes('crazygames.com')) {
+          console.log("🎮 Loading CrazyGames content:", url);
+          
+          // Make sure the iframe has the right sandbox permissions
+          if (mediaFrameRef.current.sandbox) {
+            mediaFrameRef.current.sandbox.value = "allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox";
+          }
+          
+          // Set new URL after a short delay
+          setTimeout(() => {
+            if (mediaFrameRef.current) {
+              mediaFrameRef.current.src = url;
+              mediaFrameRef.current.classList.remove('hidden');
+            }
+          }, 100); // Slightly longer delay for games
+        } else {
+          // For other URLs
+          setTimeout(() => {
+            if (mediaFrameRef.current) {
+              mediaFrameRef.current.src = url;
+              mediaFrameRef.current.classList.remove('hidden');
+            }
+          }, 50);
+        }
       }
       if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
       if (videoRef.current) videoRef.current.classList.add('hidden');
@@ -2443,13 +2471,12 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   objectFit: 'contain',
                   backgroundColor: '#000'
                 }}
-              />              
-              {/* LiveKit screen share will be handled by track subscription events to the main videoRef */}
-              <iframe 
+              />                {/* LiveKit screen share will be handled by track subscription events to the main videoRef */}              <iframe 
                 ref={mediaFrameRef} 
                 className="absolute inset-0 w-full h-full border-0 rounded-md hidden" 
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen; camera; microphone"
                 allowFullScreen
+                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox allow-downloads"
                 title="Media Content"
               ></iframe>
               <div ref={placeholderContentRef} className="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
