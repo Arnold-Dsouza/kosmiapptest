@@ -276,9 +276,47 @@ export const useLiveKit = ({
       console.log('Successfully connected to LiveKit room');      // Monitor for DataChannel errors after connection
       // This will catch runtime DataChannel errors that occur after initial connection
       const originalConsoleError = console.error;
+      let isHandlingError = false; // Flag to prevent infinite loops
+      let errorCount = 0; // Counter to prevent too many consecutive errors
+      let lastErrorTime = 0; // Timestamp of last error
+      
       const dataChannelErrorHandler = (...args: any[]) => {
+        // Prevent infinite loops by checking if we're already handling an error
+        if (isHandlingError) {
+          originalConsoleError.apply(console, args);
+          return;
+        }
+        
+        // Rate limiting: prevent handling too many errors in quick succession
+        const now = Date.now();
+        if (now - lastErrorTime < 100) { // Less than 100ms since last error
+          errorCount++;
+          if (errorCount > 5) {
+            originalConsoleError('Too many DataChannel errors in quick succession, reverting to original console.error');
+            console.error = originalConsoleError;
+            originalConsoleError.apply(console, args);
+            return;
+          }
+        } else {
+          errorCount = 0; // Reset counter after time gap
+        }
+        lastErrorTime = now;
+        
         const message = args.join(' ');
-        if (message.includes('DataChannel error') || message.includes('data channel')) {
+        
+        // Only handle DataChannel errors from LiveKit, not from our own error handling
+        if ((message.includes('DataChannel error') || message.includes('data channel')) && 
+            !message.includes('LiveKit error:')) {
+          isHandlingError = true;
+          
+          // Add timeout to prevent hanging
+          const timeoutId = setTimeout(() => {
+            if (isHandlingError) {
+              originalConsoleError('DataChannel error handler timeout, resetting...');
+              isHandlingError = false;
+            }
+          }, 5000); // 5 second timeout
+          
           console.warn('🔧 Runtime DataChannel error detected:', {
             message,
             timestamp: new Date().toISOString(),
@@ -286,17 +324,29 @@ export const useLiveKit = ({
             participantCount: newRoom.numParticipants,
             args
           });
-          // Trigger onError callback for DataChannel errors
-          onError?.(new Error(`DataChannel error: ${message}`));
-        } else if (message.includes('RTCEngine') && message.includes('error')) {
+          
+          // Trigger onError callback for DataChannel errors without using console.error
+          try {
+            onError?.(new Error(`DataChannel error: ${message}`));
+          } catch (errorInCallback) {
+            // Use original console.error to avoid infinite loop
+            originalConsoleError('Error in onError callback:', errorInCallback);
+          } finally {
+            clearTimeout(timeoutId);
+            isHandlingError = false;
+          }
+        } else if (message.includes('RTCEngine') && message.includes('error') && 
+                   !message.includes('LiveKit error:')) {
           console.warn('🔧 RTCEngine error detected:', {
             message,
             timestamp: new Date().toISOString(),
             args
           });
+          originalConsoleError.apply(console, args);
+        } else {
+          // For all other errors, use original console.error
+          originalConsoleError.apply(console, args);
         }
-        // Call original console.error
-        originalConsoleError.apply(console, args);
       };
       
       // Temporarily override console.error to catch DataChannel errors
@@ -480,12 +530,17 @@ export const useLiveKit = ({
       connectToRoom();
     }
   }, [token, serverUrl, isConnected, isConnecting, connectToRoom]);
-  
-  // Cleanup on unmount
+    // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (roomRef.current) {
         console.log('Cleaning up LiveKit room on unmount');
+        
+        // Restore original console.error if it was overridden
+        if ((roomRef.current as any)._originalConsoleError) {
+          console.error = (roomRef.current as any)._originalConsoleError;
+        }
+        
         roomRef.current.disconnect();
         roomRef.current = null;
       }

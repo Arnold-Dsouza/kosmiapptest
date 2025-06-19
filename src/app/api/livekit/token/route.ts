@@ -20,28 +20,26 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 }
       );
-    }
+    }    const body = await request.json();
+    const { room, roomName, username, participantName, identity, isHost = false } = body;
 
-    const body = await request.json();
-    const { room, username, identity, isHost = false } = body;
+    // Support both parameter formats (room/username and roomName/participantName)
+    const roomId = room || roomName;
+    const userName = username || participantName;
 
-    if (!room || !username) {
+    if (!roomId || !userName) {
       return NextResponse.json(
         { 
-          error: 'room and username are required' 
+          error: 'Room name and username are required' 
         },
         { status: 400 }
       );
-    }
-
-    // Create access token
+    }    // Create access token
     const token = new AccessToken(LIVEKIT_CONFIG.apiKey, LIVEKIT_CONFIG.apiSecret, {
-      identity: identity || username,
-    });
-
-    // Grant permissions based on role
+      identity: identity || userName,
+    });// Grant permissions based on role
     token.addGrant({
-      room: room,
+      room: roomId,
       roomJoin: true,
       canPublish: true, // Allow publishing for screen share
       canSubscribe: true, // Allow subscribing to view others
@@ -50,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     const jwt = token.toJwt();
     
-    console.log('✅ Generated LiveKit token for:', { room, username, isHost });
+    console.log('✅ Generated LiveKit token for:', { roomId, userName, isHost });
     
     return NextResponse.json({ 
       token: jwt,

@@ -662,21 +662,20 @@ export default function RoomClient({ roomId }: RoomClientProps) {
        mediaFrameRef.current.classList.remove('hidden');
        if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
     }  }, [currentMediaUrl]);
-
-  // Function to get LiveKit token from backend
+  // Function to get LiveKit token from API route
   const getLivekitToken = useCallback(async () => {
     if (!userName || !roomId) return;
     
     try {
-      console.log('🎫 Getting LiveKit token from backend server...');
-      const response = await fetch('http://localhost:3001/api/token', {
+      console.log('🎫 Getting LiveKit token from Next.js API route...');
+      const response = await fetch('/api/livekit/token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          roomName: roomId,
-          participantName: userName,
+          room: roomId,
+          username: userName,
           identity: userName,
           isHost: isHost,
         }),
@@ -684,8 +683,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
       if (!response.ok) {
         throw new Error(`Failed to get token: ${response.status} ${response.statusText}`);
-      }      const data = await response.json();
-      console.log('✅ Received LiveKit token from backend:', {
+      }
+      
+      const data = await response.json();
+      console.log('✅ Received LiveKit token from API:', {
         hasToken: !!data.token,
         tokenLength: data.token?.length,
         tokenPreview: data.token?.substring(0, 50) + '...',
@@ -694,8 +695,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       
       setLivekitToken(data.token);
       setLivekitServerUrl(data.wsUrl || 'wss://screenshare-3gbbe0by.livekit.cloud');
-      
-    } catch (error) {
+      } catch (error) {
       console.error('❌ Failed to get LiveKit token:', error);
       toast({
         variant: "destructive",
@@ -766,10 +766,12 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     };
   }, [mediaSourceText, isSeeking]); // Re-run if mediaSourceText changes (e.g. screen share starts/stops)
 
-
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setRoomLink(window.location.href);
+      // Use absolute URL with the correct host for production deployment
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+      const roomUrl = `${baseUrl}/room/${roomId}`;
+      setRoomLink(roomUrl);
     }
     
     return () => {
