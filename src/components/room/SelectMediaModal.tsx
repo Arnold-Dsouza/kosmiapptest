@@ -31,7 +31,7 @@ const categories = [
 
 const mediaItemsData = [
   { id: 'youtube', name: 'YouTube', imageUrl: 'https://placehold.co/200x120/FFF/000.png?text=YouTube', category: ['discover', 'streaming'], type: 'video_catalog', hint: 'youtube logo red' },
-  { id: 'minigolf', name: 'Mini Golf Club', imageUrl: 'https://imgs.crazygames.com/mini-golf-club_16x9/20250106022059/mini-golf-club_16x9-cover?metadata=none&quality=70', category: ['discover', 'games'], type: 'crazy_game', hint: 'mini golf game' },
+  { id: 'minigolf', name: 'Mini Golf Club', imageUrl: 'https://placehold.co/200x120/4CAF50/FFF.png?text=Mini+Golf', category: ['discover', 'games'], type: 'crazy_game', hint: 'mini golf game' },
   { id: 'pool', name: '8 Ball Pool Billiards', imageUrl: 'https://placehold.co/200x120/000/FFF.png?text=8+Ball+Pool', category: ['discover', 'games'], type: 'crazy_game', hint: 'billiards game' },
   { id: 'tubi', name: 'Tubi', imageUrl: 'https://placehold.co/200x120/E50914/FFF.png?text=Tubi', category: ['discover', 'streaming'], type: 'video_catalog', hint: 'tubi tv logo' },
   { id: 'virtualbrowser', name: 'Virtual Browser', imageUrl: 'https://placehold.co/200x120/1E88E5/FFF.png?text=Virtual+Browser', category: ['discover', 'kosmi_apps'], type: 'kosmi_app', isPremium: true, hint: 'globe browser icon' },
