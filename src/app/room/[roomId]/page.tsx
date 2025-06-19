@@ -8,7 +8,7 @@ type Props = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { roomId } = await params;
   return {
-    title: `Room: ${roomId} | Virtual Hub`,
+    title: `Room: ${roomId} | OurScreen`,
   };
 }
 

@@ -168,7 +168,7 @@ export default function Home() {
           <div className="container text-center">
             <h2 className="text-3xl md:text-4xl font-bold mb-4 font-headline text-foreground">And So Much More...</h2>
             <p className="max-w-xl mx-auto text-lg text-muted-foreground mb-8">
-              Virtual Hub is packed with features to make your online gatherings unforgettable. From custom room settings to moderation tools, you're in control.
+              OurScreen is packed with features to make your online gatherings unforgettable. From custom room settings to moderation tools, you're in control.
             </p>
             <Image 
               src="https://placehold.co/1200x600.png" 

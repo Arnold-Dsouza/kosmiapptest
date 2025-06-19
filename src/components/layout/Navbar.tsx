@@ -75,7 +75,7 @@ export default function Navbar() {
         <div className="container flex h-16 items-center">
           <Link href="/" className="mr-6 flex items-center space-x-2">
             <MountainIcon className="h-6 w-6 text-primary" />
-            <span className="font-bold text-xl sm:inline-block font-headline text-foreground">Virtual Hub</span>
+            <span className="font-bold text-xl sm:inline-block font-headline text-foreground">OurScreen</span>
           </Link>
           <nav className="flex flex-1 items-center space-x-4 sm:space-x-6">
             {/* Future nav links can go here: Features, Pricing, About */}

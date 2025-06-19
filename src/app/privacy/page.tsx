@@ -8,7 +8,7 @@ export default function PrivacyPage() {
       <main className="flex-grow container py-12">
         <h1 className="text-3xl font-bold mb-6 font-headline">Privacy Policy</h1>
         <div className="prose dark:prose-invert max-w-none bg-card p-6 rounded-lg shadow">
-          <p>Your privacy is important to us. It is Virtual Hub&apos;s policy to respect your privacy regarding any information we may collect from you across our website, [Your Website URL], and other sites we own and operate.</p>
+          <p>Your privacy is important to us. It is OurScreen&apos;s policy to respect your privacy regarding any information we may collect from you across our website, [Your Website URL], and other sites we own and operate.</p>
           
           <h2 className="text-2xl font-semibold mt-6 mb-3">Information We Collect</h2>
           <p>We only ask for personal information when we truly need it to provide a service to you. We collect it by fair and lawful means, with your knowledge and consent. We also let you know why we’re collecting it and how it will be used.</p>

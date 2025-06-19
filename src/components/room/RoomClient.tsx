@@ -237,7 +237,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   // Update document title when room name changes
   useEffect(() => {
     if (typeof document !== 'undefined' && roomName) {
-      document.title = `${roomName} - VideoHub`;
+      document.title = `${roomName} - OurScreen`;
     }
   }, [roomName]);
   
@@ -1923,7 +1923,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         
         // Update document title
         if (typeof document !== 'undefined') {
-          document.title = `${newRoomName} - VideoHub`;
+          document.title = `${newRoomName} - OurScreen`;
         }
         
         // Save to localStorage

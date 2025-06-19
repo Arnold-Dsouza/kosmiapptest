@@ -5,7 +5,7 @@ export default function Footer() {
   return (
     <footer className="border-t border-border bg-card/50">
       <div className="container py-8 text-center text-sm text-muted-foreground">
-        <p>&copy; {currentYear} Virtual Hub. All rights reserved.</p>
+        <p>&copy; {currentYear} OurScreen. All rights reserved.</p>
         <div className="mt-2 space-x-4">
           <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
           <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>

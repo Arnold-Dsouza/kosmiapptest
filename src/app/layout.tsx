@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; // Added Toaster for potential notifications
 
 export const metadata: Metadata = {
-  title: 'Virtual Hub',
+  title: 'OurScreen',
   description: 'Your space to connect, share, and play.',
 };
 
