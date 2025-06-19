@@ -692,21 +692,29 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           identity: userName,
           isHost: isHost,
         }),
-      });
-
-      // Parse the response regardless of status to see error details
+      });      // Parse the response regardless of status to see error details
       const data = await response.json();
       
       if (!response.ok) {
         console.error('Token API error response:', data);
         throw new Error(`Failed to get token: ${response.status} ${response.statusText} - ${data.error || 'Unknown error'}`);
       }
-        if (!data.token) {
+      
+      // Validate the token
+      if (!data.token) {
+        console.error('Token API returned success but no token was provided:', data);
         throw new Error('Token API returned success but no token was provided');
       }
       
       if (typeof data.token !== 'string') {
-        throw new Error('Token API returned success but token is not a string: ' + JSON.stringify(data));
+        console.error('Token API returned success but token is not a string:', data);
+        
+        // If it's an empty object, it might be an environment variable issue
+        if (data.token && typeof data.token === 'object' && Object.keys(data.token).length === 0) {
+          throw new Error('LiveKit token generation failed. Please check server environment variables.');
+        } else {
+          throw new Error('Token API returned success but token is not a string: ' + JSON.stringify(data));
+        }
       }
         
       console.log('✅ Received LiveKit token from API:', {
