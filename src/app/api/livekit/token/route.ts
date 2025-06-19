@@ -45,7 +45,9 @@ export async function POST(request: NextRequest) {
     }    // Create access token
     const token = new AccessToken(LIVEKIT_CONFIG.apiKey, LIVEKIT_CONFIG.apiSecret, {
       identity: identity || userName,
-    });// Grant permissions based on role
+    });
+    
+    // Grant permissions based on role
     token.addGrant({
       room: roomId,
       roomJoin: true,

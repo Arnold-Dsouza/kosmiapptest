@@ -661,46 +661,70 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     } else if (mediaFrameRef.current && currentMediaUrl) {
        mediaFrameRef.current.classList.remove('hidden');
        if (placeholderContentRef.current) placeholderContentRef.current.classList.add('hidden');
-    }  }, [currentMediaUrl]);
-  // Function to get LiveKit token from API route
+    }  }, [currentMediaUrl]);  // Function to get LiveKit token from API route
   const getLivekitToken = useCallback(async () => {
-    if (!userName || !roomId) return;
+    if (!userName || !roomId) {
+      console.warn('Cannot get LiveKit token: missing userName or roomId');
+      return;
+    }
     
     try {
-      console.log('🎫 Getting LiveKit token from Next.js API route...');
-      const response = await fetch('/api/livekit/token', {
+      console.log('🎫 Getting LiveKit token from Next.js API route...', {
+        roomId,
+        userName
+      });
+      
+      // For local development, check if we should use a different endpoint
+      const tokenEndpoint = process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:3001/api/token' // Use Express backend in development
+        : '/api/livekit/token'; // Use Next.js API route in production
+      
+      const response = await fetch(tokenEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           room: roomId,
+          roomName: roomId, // Support both parameter formats
           username: userName,
+          participantName: userName, // Support both parameter formats
           identity: userName,
           isHost: isHost,
         }),
       });
 
+      // Parse the response regardless of status to see error details
+      const data = await response.json();
+      
       if (!response.ok) {
-        throw new Error(`Failed to get token: ${response.status} ${response.statusText}`);
+        console.error('Token API error response:', data);
+        throw new Error(`Failed to get token: ${response.status} ${response.statusText} - ${data.error || 'Unknown error'}`);
       }
       
-      const data = await response.json();
+      if (!data.token) {
+        throw new Error('Token API returned success but no token was provided');
+      }
+      
       console.log('✅ Received LiveKit token from API:', {
         hasToken: !!data.token,
         tokenLength: data.token?.length,
-        tokenPreview: data.token?.substring(0, 50) + '...',
+        tokenPreview: data.token?.substring(0, 20) + '...',
         wsUrl: data.wsUrl
       });
       
+      // Set the token and server URL
       setLivekitToken(data.token);
       setLivekitServerUrl(data.wsUrl || 'wss://screenshare-3gbbe0by.livekit.cloud');
-      } catch (error) {
-      console.error('❌ Failed to get LiveKit token:', error);
+      return data.token; // Return the token for convenience
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('❌ Failed to get LiveKit token:', errorMessage);
       toast({
         variant: "destructive",
         title: "Connection Error",
-        description: "Failed to connect to screen sharing service",
+        description: `Failed to connect to LiveKit: ${errorMessage}`,
       });
     }
   }, [userName, roomId, isHost, toast]);

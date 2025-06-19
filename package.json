@@ -8,7 +8,10 @@
     "build": "node scripts/check-env.js && next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "backend": "cd backend && node server.js",
+    "test:api": "node scripts/test-api-routes.js",
+    "vercel-build": "next build"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.8.0",
