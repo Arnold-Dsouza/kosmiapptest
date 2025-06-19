@@ -728,15 +728,48 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       setLivekitToken(data.token);
       setLivekitServerUrl(data.wsUrl || 'wss://screenshare-3gbbe0by.livekit.cloud');
       return data.token; // Return the token for convenience
-      
-    } catch (error) {
+        } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ Failed to get LiveKit token:', errorMessage);
+      
+      // More user-friendly error messages
+      let userMessage = `Failed to connect to LiveKit: ${errorMessage}`;
+      
+      if (errorMessage.includes('Generated token is invalid') || 
+          errorMessage.includes('token is not a string') ||
+          errorMessage.includes('environment variables')) {
+        userMessage = 'Server configuration error. Please check the LiveKit configuration settings.';
+      } else if (errorMessage.includes('Failed to fetch')) {
+        userMessage = 'Network error. Please check your connection and try again.';
+      }
+      
       toast({
         variant: "destructive",
         title: "Connection Error",
-        description: `Failed to connect to LiveKit: ${errorMessage}`,
+        description: userMessage,
       });
+      
+      // Add a retry button for LiveKit connection errors
+      if (errorMessage.includes('LiveKit') || errorMessage.includes('token')) {
+        setTimeout(() => {
+          toast({
+            variant: "default",
+            title: "Retry Connection?",
+            description: "The server might need more time to initialize. Try again?",
+            action: (
+              <div className="flex space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => getLivekitToken()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ),
+          });
+        }, 3000);
+      }
     }
   }, [userName, roomId, isHost, toast]);
 

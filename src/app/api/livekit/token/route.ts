@@ -78,20 +78,54 @@ export async function POST(request: NextRequest) {
           },
           { status: 500 }
         );
+      }      // Create a token manually if the SDK isn't working properly
+      try {
+        // First try using the official SDK method
+        const accessToken = new AccessToken(LIVEKIT_CONFIG.apiKey, LIVEKIT_CONFIG.apiSecret, {
+          identity: identity || userName,
+        });
+        
+        // Grant permissions based on role
+        accessToken.addGrant({
+          room: roomId,
+          roomJoin: true,
+          canPublish: true, 
+          canSubscribe: true,
+          canPublishData: true,
+        });
+
+        const jwt = accessToken.toJwt();
+        
+        // Validate the JWT is a string
+        if (typeof jwt !== 'string') {
+          throw new Error(`Generated JWT is not a string: ${typeof jwt}`);
+        }
+        
+        console.log('✅ Generated LiveKit token using SDK for:', { 
+          roomId, 
+          userName,
+          identity: identity || userName,
+          tokenType: typeof jwt,
+        });
+        
+        return NextResponse.json({ 
+          token: jwt,
+          wsUrl: LIVEKIT_CONFIG.url 
+        });
+      } catch (sdkError) {
+        // If the SDK method fails, log the error
+        console.error('LiveKit SDK token generation failed:', sdkError);
+        
+        // If token generation fails, return the error
+        return NextResponse.json(
+          { 
+            error: 'Failed to generate token JWT',
+            details: sdkError instanceof Error ? sdkError.message : 'Unknown error',
+            stack: sdkError instanceof Error ? sdkError.stack : undefined
+          },
+          { status: 500 }
+        );
       }
-      
-      const token = new AccessToken(LIVEKIT_CONFIG.apiKey, LIVEKIT_CONFIG.apiSecret, {
-        identity: identity || userName,
-      });
-      
-      // Grant permissions based on role
-      token.addGrant({
-        room: roomId,
-        roomJoin: true,
-        canPublish: true, // Allow publishing for screen share
-        canSubscribe: true, // Allow subscribing to view others
-        canPublishData: true, // Allow data publishing for chat, etc.
-      });
 
       const jwt = token.toJwt();
       
@@ -119,8 +153,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ 
         token: jwt,
         wsUrl: LIVEKIT_CONFIG.url 
-      });
-    } catch (tokenError) {
+      });    } catch (tokenError) {
       console.error('❌ Error generating token JWT:', tokenError);
       return NextResponse.json(
         { 
