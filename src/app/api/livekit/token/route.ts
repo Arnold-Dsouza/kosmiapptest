@@ -9,14 +9,22 @@ const LIVEKIT_CONFIG = {
 };
 
 export async function POST(request: NextRequest) {
-  try {
-    // Validate configuration
+  try {    // Validate configuration
     if (!LIVEKIT_CONFIG.apiKey || !LIVEKIT_CONFIG.apiSecret || !LIVEKIT_CONFIG.url) {
-      console.error('❌ Missing required LiveKit environment variables!');
+      console.error('❌ Missing required LiveKit environment variables!', {
+        hasApiKey: !!LIVEKIT_CONFIG.apiKey,
+        hasApiSecret: !!LIVEKIT_CONFIG.apiSecret,
+        hasUrl: !!LIVEKIT_CONFIG.url
+      });
       return NextResponse.json(
         { 
           error: 'Server configuration error',
-          details: 'Missing LiveKit credentials'
+          details: 'Missing LiveKit credentials',
+          missing: {
+            apiKey: !LIVEKIT_CONFIG.apiKey,
+            apiSecret: !LIVEKIT_CONFIG.apiSecret,
+            url: !LIVEKIT_CONFIG.url
+          }
         },
         { status: 500 }
       );

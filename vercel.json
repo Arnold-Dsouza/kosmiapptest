@@ -3,10 +3,5 @@
   "buildCommand": "next build",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "outputDirectory": ".next",  "env": {
-    "LIVEKIT_API_KEY": "@livekit_api_key",
-    "LIVEKIT_API_SECRET": "@livekit_api_secret", 
-    "LIVEKIT_URL": "@livekit_url",
-    "NEXT_PUBLIC_BASE_URL": "@next_public_base_url"
-  }
+  "outputDirectory": ".next"
 }

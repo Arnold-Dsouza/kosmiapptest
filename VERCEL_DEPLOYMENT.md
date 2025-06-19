@@ -27,7 +27,7 @@ Make sure your code is in a Git repository (GitHub, GitLab, or Bitbucket).
 
 ### 3. Configure Environment Variables
 
-Add the following environment variables in the Vercel project settings:
+Add the following environment variables in the Vercel project settings under **Settings > Environment Variables**:
 
 #### LiveKit Configuration
 
@@ -73,6 +73,40 @@ For local development:
 
 ## Troubleshooting
 
-- **Token Generation Issues**: Check LiveKit credentials in environment variables
-- **Firebase Connection Issues**: Verify Firebase credentials and check for security rules
-- **Deployment Failures**: Review build logs in Vercel dashboard
+### Environment Variable Issues
+
+If you see an error message like `Environment Variable "LIVEKIT_API_KEY" references Secret "livekit_api_key", which does not exist`:
+
+1. Go to your Vercel project **Settings > Environment Variables**
+2. Add each environment variable directly:
+   - Set the variable name (e.g., `LIVEKIT_API_KEY`)
+   - Add the actual value (not a reference like `@livekit_api_key`)
+   - Select the appropriate environments (Production, Preview, and Development)
+   - Save
+
+### Token Generation Issues
+
+If LiveKit token generation fails:
+
+1. Check that all LiveKit environment variables are correctly set in Vercel
+2. Test the `/api/livekit/token` endpoint by making a POST request with:
+
+   ```json
+   {
+     "room": "test-room",
+     "username": "test-user"
+   }
+   ```
+
+3. Check the response for detailed error information
+
+### Firebase Connection Issues
+
+- Verify Firebase credentials are correctly set
+- Check Firebase console for security rules
+- Ensure your IP address is not blocked
+
+### Deployment Failures
+
+- Review build logs in Vercel dashboard
+- Check that your Next.js build is succeeding locally with `npm run build`
