@@ -3,9 +3,9 @@ import { AccessToken } from 'livekit-server-sdk';
 
 // LiveKit Configuration from environment variables
 const LIVEKIT_CONFIG = {
-  apiKey: process.env.LIVEKIT_API_KEY,
-  apiSecret: process.env.LIVEKIT_API_SECRET,
-  url: process.env.LIVEKIT_URL,
+  apiKey: process.env.LIVEKIT_API_KEY || '',
+  apiSecret: process.env.LIVEKIT_API_SECRET || '',
+  url: process.env.LIVEKIT_URL || '',
 };
 
 export async function POST(request: NextRequest) {
@@ -43,27 +43,42 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }    // Create access token
-    const token = new AccessToken(LIVEKIT_CONFIG.apiKey, LIVEKIT_CONFIG.apiSecret, {
-      identity: identity || userName,
-    });
-    
-    // Grant permissions based on role
-    token.addGrant({
-      room: roomId,
-      roomJoin: true,
-      canPublish: true, // Allow publishing for screen share
-      canSubscribe: true, // Allow subscribing to view others
-      canPublishData: true, // Allow data publishing for chat, etc.
-    });
-
-    const jwt = token.toJwt();
-    
-    console.log('✅ Generated LiveKit token for:', { roomId, userName, isHost });
-    
-    return NextResponse.json({ 
-      token: jwt,
-      wsUrl: LIVEKIT_CONFIG.url 
-    });
+    try {
+      const token = new AccessToken(LIVEKIT_CONFIG.apiKey, LIVEKIT_CONFIG.apiSecret, {
+        identity: identity || userName,
+      });
+      
+      // Grant permissions based on role
+      token.addGrant({
+        room: roomId,
+        roomJoin: true,
+        canPublish: true, // Allow publishing for screen share
+        canSubscribe: true, // Allow subscribing to view others
+        canPublishData: true, // Allow data publishing for chat, etc.
+      });      const jwt = token.toJwt();
+      
+      console.log('✅ Generated LiveKit token for:', { 
+        roomId, 
+        userName, 
+        isHost,
+        hasToken: !!jwt,
+        tokenType: typeof jwt
+      });
+      
+      return NextResponse.json({ 
+        token: jwt,
+        wsUrl: LIVEKIT_CONFIG.url 
+      });
+    } catch (tokenError) {
+      console.error('❌ Error generating token JWT:', tokenError);
+      return NextResponse.json(
+        { 
+          error: 'Failed to generate token JWT',
+          details: tokenError instanceof Error ? tokenError.message : 'Unknown error'
+        },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     console.error('❌ Error generating LiveKit token:', error);
     return NextResponse.json(

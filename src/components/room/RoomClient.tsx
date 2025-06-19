@@ -701,15 +701,18 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         console.error('Token API error response:', data);
         throw new Error(`Failed to get token: ${response.status} ${response.statusText} - ${data.error || 'Unknown error'}`);
       }
-      
-      if (!data.token) {
+        if (!data.token) {
         throw new Error('Token API returned success but no token was provided');
       }
       
+      if (typeof data.token !== 'string') {
+        throw new Error('Token API returned success but token is not a string: ' + JSON.stringify(data));
+      }
+        
       console.log('✅ Received LiveKit token from API:', {
         hasToken: !!data.token,
-        tokenLength: data.token?.length,
-        tokenPreview: data.token?.substring(0, 20) + '...',
+        tokenLength: data.token.length,
+        tokenPreview: data.token.substring(0, 20) + '...',
         wsUrl: data.wsUrl
       });
       
