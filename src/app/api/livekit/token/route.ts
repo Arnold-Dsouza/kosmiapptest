@@ -54,27 +54,11 @@ export async function POST(request: NextRequest) {
       canPublish: true, // Allow publishing for screen share
       canSubscribe: true, // Allow subscribing to view others
       canPublishData: true, // Allow data publishing for chat, etc.
-    });    // Generate the token and ensure it's a string
-    let jwt;
-    try {
-      jwt = token.toJwt();
-      
-      if (typeof jwt !== 'string') {
-        console.warn('⚠️ LiveKit token is not a string, converting to string');
-        jwt = String(jwt);
-      }
-      
-      console.log('✅ Generated LiveKit token for:', { 
-        roomId, 
-        userName, 
-        isHost, 
-        tokenType: typeof jwt,
-        tokenLength: jwt.length
-      });    } catch (error) {
-      console.error('❌ Error generating JWT:', error);
-      const tokenError = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to generate JWT token: ${tokenError}`);
-    }
+    });
+
+    const jwt = token.toJwt();
+    
+    console.log('✅ Generated LiveKit token for:', { roomId, userName, isHost });
     
     return NextResponse.json({ 
       token: jwt,
