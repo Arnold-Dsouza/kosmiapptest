@@ -701,22 +701,26 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         console.error('Token API error response:', data);
         throw new Error(`Failed to get token: ${response.status} ${response.statusText} - ${data.error || 'Unknown error'}`);
       }
-      
-      if (!data.token) {
+        if (!data.token) {
         throw new Error('Token API returned success but no token was provided');
       }
       
+      // Ensure token is a string
+      const tokenString = typeof data.token === 'string' 
+        ? data.token 
+        : JSON.stringify(data.token);
+      
       console.log('✅ Received LiveKit token from API:', {
-        hasToken: !!data.token,
-        tokenLength: data.token?.length,
-        tokenPreview: data.token?.substring(0, 20) + '...',
+        hasToken: !!tokenString,
+        tokenType: typeof data.token,
+        tokenLength: tokenString?.length,
+        tokenPreview: tokenString ? `${tokenString.substring(0, 20)}...` : 'null',
         wsUrl: data.wsUrl
       });
-      
-      // Set the token and server URL
-      setLivekitToken(data.token);
+        // Set the token and server URL
+      setLivekitToken(tokenString);
       setLivekitServerUrl(data.wsUrl || 'wss://screenshare-3gbbe0by.livekit.cloud');
-      return data.token; // Return the token for convenience
+      return tokenString; // Return the token for convenience
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
