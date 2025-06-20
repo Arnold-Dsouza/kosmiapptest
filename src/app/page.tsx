@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -25,48 +24,47 @@ export default function Home() {
   const router = useRouter();
   const [isCreateRoomDialogOpen, setIsCreateRoomDialogOpen] = useState(false);
   const [roomNameInput, setRoomNameInput] = useState('');
-
   const features = [
     {
       icon: Film,
       title: 'Watch Videos Together',
       description: 'Sync YouTube, Vimeo, or local files. Enjoy movies and shows with friends in real-time.',
-      imageUrl: 'https://placehold.co/600x400.png',
+      imageUrl: '/images/watchtogether.jpg',
       imageHint: 'cinema screen',
     },
     {
       icon: Gamepad2,
       title: 'Play Games Online',
       description: 'Dive into a variety of embedded online games or share your own emulated classics.',
-      imageUrl: 'https://placehold.co/600x400.png',
+      imageUrl: '/images/Play Games Online.jpg',
       imageHint: 'game controllers',
     },
     {
       icon: Users,
       title: 'Hang Out & Chat',
       description: 'Seamless video and text chat keeps everyone connected. Share moments and laughs.',
-      imageUrl: 'https://placehold.co/600x400.png',
+      imageUrl: '/images/Hang Out & Chat.jpg',
       imageHint: 'people chatting',
     },
     {
       icon: ScreenShare,
       title: 'Share Your Screen',
       description: 'Present, collaborate, or show anything on your desktop with high-quality screen sharing.',
-      imageUrl: 'https://placehold.co/600x400.png',
+      imageUrl: '/images/Share Your Screen.jpg',
       imageHint: 'desktop monitor',
     },
     {
       icon: Edit3,
       title: 'Collaborate on Whiteboards',
       description: 'Brainstorm ideas, draw, and strategize together on a shared digital whiteboard.',
-      imageUrl: 'https://placehold.co/600x400.png',
+      imageUrl: '/images/Collaborate on Whiteboards online.jpg',
       imageHint: 'whiteboard drawing',
     },
     {
       icon: Music,
       title: 'Listen to Music',
       description: 'Share your favorite tunes or discover new ones together with synchronized music playback.',
-      imageUrl: 'https://placehold.co/600x400.png',
+      imageUrl: '/images/music.jpg',
       imageHint: 'headphones music',
     },
   ];
@@ -162,6 +160,41 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        {/* Team Section */}
+        <section className="py-16 md:py-24 bg-background">
+          <div className="container">
+            <h2 className="text-3xl md:text-4xl font-bold text-center mb-4 font-headline text-foreground">
+              Meet the <span className="text-primary">Creator</span>
+            </h2>
+            <p className="max-w-2xl mx-auto text-center text-lg text-muted-foreground mb-12">
+              Passionate about bringing people together through technology and creating seamless digital experiences.
+            </p>
+            <div className="max-w-md mx-auto">
+              <div className="bg-card rounded-xl shadow-lg p-8 text-center border border-border/50">
+                <div className="relative w-32 h-32 mx-auto mb-6">
+                  <Image
+                    src="/images/creator.jpg"
+                    alt="Creator Profile"
+                    width={128}
+                    height={128}
+                    className="rounded-full object-cover border-4 border-primary/20"
+                  />
+                  <div className="absolute -bottom-2 -right-2 bg-primary text-primary-foreground rounded-full p-2">
+                    <Users className="h-4 w-4" />
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold text-card-foreground mb-2">Arnold Dsouza</h3>
+                <p className="text-primary font-semibold mb-3">Founder & Creator</p>
+              
+                <div className="flex justify-center space-x-3">
+                  
+                 
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
         
         {/* "And More" Section */}
         <section className="py-16 md:py-24 bg-background">
@@ -169,9 +202,8 @@ export default function Home() {
             <h2 className="text-3xl md:text-4xl font-bold mb-4 font-headline text-foreground">And So Much More...</h2>
             <p className="max-w-xl mx-auto text-lg text-muted-foreground mb-8">
               OurScreen is packed with features to make your online gatherings unforgettable. From custom room settings to moderation tools, you're in control.
-            </p>
-            <Image 
-              src="https://placehold.co/1200x600.png" 
+            </p>            <Image 
+              src="/images/1200x600.jpg" 
               alt="Collage of app features" 
               width={1200} 
               height={600}
