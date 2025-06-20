@@ -2637,9 +2637,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   <div key={user.id} className="flex flex-col items-center text-center">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="relative">
-                          {isCurrentUser && isCameraOn ? (
-                            <div className={`h-12 w-12 md:h-16 md:w-16 rounded-full overflow-hidden border-2 ${isHost ? 'border-accent ring-4 ring-accent/50' : 'border-primary ring-2 ring-primary/50'} mb-0.5 hover:scale-110 transition-transform cursor-pointer`}>
+                        <div className="relative">                          {isCurrentUser && isCameraOn ? (
+                            <div className={`h-20 w-20 md:h-28 md:w-28 lg:h-32 lg:w-32 xl:h-36 xl:w-36 rounded-full overflow-hidden border-2 ${isHost ? 'border-accent ring-4 ring-accent/50' : 'border-primary ring-2 ring-primary/50'} mb-0.5 hover:scale-105 transition-all duration-300 cursor-pointer shadow-xl`}>
                               <video
                                 ref={localVideoRef}
                                 autoPlay
