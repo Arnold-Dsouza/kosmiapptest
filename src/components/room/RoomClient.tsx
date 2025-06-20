@@ -542,8 +542,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         source: publication.source, 
         kind: publication.kind 
       });
-      
-      if (publication.source === Track.Source.ScreenShare && publication.kind === 'video' && publication.track) {
+        if (publication.source === Track.Source.ScreenShare && publication.kind === 'video' && publication.track) {
         console.log('📺 Local screen share track detected, attaching to video element for host');
         if (videoRef.current) {
           publication.track.attach(videoRef.current);
@@ -557,6 +556,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           setMediaSourceText("Your Screen (Live)");
           setIsYouTubeVideo(false);
           setCurrentMediaUrl(null);
+          // Set a dummy stream reference to indicate screen sharing is active
+          screenStreamRef.current = publication.track.mediaStream;
           console.log('✅ Host screen share attached successfully');
         }
       }
@@ -568,14 +569,15 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         source: publication.source, 
         kind: publication.kind 
       });
-      
-      if (publication.source === Track.Source.ScreenShare && publication.kind === 'video') {
+        if (publication.source === Track.Source.ScreenShare && publication.kind === 'video') {
         console.log('📺 Local screen share track removed, detaching from video element');
         if (videoRef.current) {
           publication.track?.detach();
           videoRef.current.classList.add('hidden');
           if (!currentMediaUrl && placeholderContentRef.current) placeholderContentRef.current.classList.remove('hidden');
           setMediaSourceText(null);
+          // Clear the screen reference when screen sharing stops
+          screenStreamRef.current = null;
           console.log('✅ Host screen share detached successfully');
         }
       }
@@ -772,10 +774,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
       }
     }
   }, [userName, roomId, isHost, toast]);
-
  useEffect(() => {
     const video = videoRef.current;
-    if (!video || mediaSourceText !== "Your Screen") {
+    if (!video || (!mediaSourceText || (!mediaSourceText.includes("Your Screen") && !mediaSourceText.includes("Screen shared by")))) {
       setIsScreenSharePlaying(false); // Reset if not screen sharing
       return;
     }
@@ -1731,14 +1732,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
   const handleMouseLeave = () => {
     resetControlsTimer();
-  };
-
-  const handleMouseMove = () => {
+  };  const handleMouseMove = () => {
     resetControlsTimer();
   };
-
-  const isMediaActive = !!(currentMediaUrl || screenStreamRef.current);
-  const isScreenShareActive = !!screenStreamRef.current;
+  const isMediaActive = !!(currentMediaUrl || screenStreamRef.current || (mediaSourceText && mediaSourceText.includes('Screen shared by')));
+  const isScreenShareActive = !!(screenStreamRef.current || (mediaSourceText && mediaSourceText.includes('Screen shared by')));
 
   // Reset captions state when media changes
   useEffect(() => {
@@ -2498,10 +2496,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   onMouseLeave={handleMouseLeave}
                   onMouseMove={handleMouseMove}
                 >
-                  {/* Progress Bar and Time */}
-                  <div className="flex items-center gap-2 px-1">
+                  {/* Progress Bar and Time */}                  <div className="flex items-center gap-2 px-1">
                     <span className="text-xs text-white w-12 text-center">{currentTimeDisplay}</span>
-                    {isHost && (
+                    {isHost ? (
                     <Slider
                       value={[videoProgress]}
                       max={100}
@@ -2518,6 +2515,14 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                       )}
                       disabled={!isScreenShareActive && !isYouTubeVideo}
                     />
+                    ) : (
+                    // Read-only progress bar for viewers
+                    <div className="w-full h-1.5 bg-gray-600 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-yellow-400 transition-all duration-300 ease-out"
+                        style={{ width: `${videoProgress}%` }}
+                      />
+                    </div>
                     )}
                     <span className="text-xs text-white w-12 text-center">{durationDisplay}</span>
                   </div>
@@ -2551,28 +2556,35 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                              {mediaState.isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                           </Button>
                         </TooltipTrigger>
-                            <TooltipContent><p>{mediaState.isPlaying ? "Pause" : "Play"}</p></TooltipContent>
-                      </Tooltip>                      <Tooltip>
-                        <TooltipTrigger asChild>
-                           <Button variant="default" size="icon" className="bg-white/20 hover:bg-white/30 text-white p-1.5 rounded w-9 h-9 backdrop-blur-sm" onClick={toggleScreenShareMute} disabled={!isScreenShareActive && !isYouTubeVideo}>
-                             {isScreenShareMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                           </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>{isScreenShareMuted ? "Unmute" : "Mute"}</p></TooltipContent>
-                      </Tooltip><Slider
-                          value={[screenShareVolume]}
-                          max={1}
-                          step={0.01}
-                          onValueChange={handleVolumeChange}
-                          className={cn(
-                            "w-20 h-2 ml-1",
-                            "[&>[data-radix-slider-track]]:h-1 [&>[data-radix-slider-track]]:bg-gray-500",
-                            "[&>[data-radix-slider-range]]:bg-white",
-                            "[&>[data-radix-slider-thumb]]:h-3 [&>[data-radix-slider-thumb]]:w-3 [&>[data-radix-slider-thumb]]:bg-white [&>[data-radix-slider-thumb]]:border-0 [&>[data-radix-slider-thumb]]:shadow-sm",
-                            "[&>[data-radix-slider-thumb]:focus-visible]:ring-white/50 [&>[data-radix-slider-thumb]:focus-visible]:ring-offset-0"
-                          )}
-                          disabled={(!isScreenShareActive && !isYouTubeVideo) || isScreenShareMuted}
-                        />
+                            <TooltipContent><p>{mediaState.isPlaying ? "Pause" : "Play"}</p></TooltipContent>                      </Tooltip>
+                        </>
+                      )}
+                      
+                      {/* Volume controls available to all users for screen share/youtube */}
+                      {(isScreenShareActive || isYouTubeVideo) && (
+                        <>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                             <Button variant="default" size="icon" className="bg-white/20 hover:bg-white/30 text-white p-1.5 rounded w-9 h-9 backdrop-blur-sm" onClick={toggleScreenShareMute}>
+                               {isScreenShareMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                             </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>{isScreenShareMuted ? "Unmute" : "Mute"}</p></TooltipContent>
+                        </Tooltip>
+                        <Slider
+                            value={[screenShareVolume]}
+                            max={1}
+                            step={0.01}
+                            onValueChange={handleVolumeChange}
+                            className={cn(
+                              "w-20 h-2 ml-1",
+                              "[&>[data-radix-slider-track]]:h-1 [&>[data-radix-slider-track]]:bg-gray-500",
+                              "[&>[data-radix-slider-range]]:bg-white",
+                              "[&>[data-radix-slider-thumb]]:h-3 [&>[data-radix-slider-thumb]]:w-3 [&>[data-radix-slider-thumb]]:bg-white [&>[data-radix-slider-thumb]]:border-0 [&>[data-radix-slider-thumb]]:shadow-sm",
+                              "[&>[data-radix-slider-thumb]:focus-visible]:ring-white/50 [&>[data-radix-slider-thumb]:focus-visible]:ring-offset-0"
+                            )}
+                            disabled={isScreenShareMuted}
+                          />
                         </>
                       )}
                     </div>
