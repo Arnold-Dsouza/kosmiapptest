@@ -107,11 +107,19 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   useEffect(() => {
     setIsHydrated(true);
   }, []);
-
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMicOn, setIsMicOn] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
+  
+  // Voice activity detection states
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceLevel, setVoiceLevel] = useState(0); // 0-100 scale
+  const [participantSpeaking, setParticipantSpeaking] = useState<{[key: string]: boolean}>({});
+  const [participantVoiceLevels, setParticipantVoiceLevels] = useState<{[key: string]: number}>({});
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
   const mediaFrameRef = useRef<HTMLIFrameElement>(null);
   const placeholderContentRef = useRef<HTMLDivElement>(null);
@@ -1791,36 +1799,55 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
-  }, []);
-
-  // Check if user is the first participant and set up initial state
+  }, []);  // Check if user is the first participant and set up initial state
   useEffect(() => {
+    // Only run after hydration is complete
+    if (!isHydrated) return;
+    
     const checkFirstParticipant = async () => {
-      const participantsRef = collection(db, 'rooms', roomId, 'participants');
-      const snapshot = await getDocs(participantsRef);
-      
-      if (snapshot.empty) {
-        // This is the first participant (room creator)
-        setIsHost(true);
-        const defaultName = 'Host';
-        setUserName(defaultName);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('vh_userName', defaultName);
-        }
-      } else {
-        // This is a joining participant
-        const storedName = typeof window !== 'undefined' ? localStorage.getItem('vh_userName') : '';
-        if (storedName) {
-          setUserName(storedName);
+      try {
+        console.log('🔍 Checking if user is first participant...');
+        const participantsRef = collection(db, 'rooms', roomId, 'participants');
+        const snapshot = await getDocs(participantsRef);
+        
+        if (snapshot.empty) {
+          // This is the first participant (room creator)
+          console.log('👑 User is the first participant - setting as host');
+          setIsHost(true);
+          
+          // Check if host has a stored name
+          const storedName = typeof window !== 'undefined' ? localStorage.getItem('vh_userName') : '';
+          console.log('💾 Stored name:', storedName);
+          
+          if (storedName && storedName.trim() !== '' && storedName !== 'Host') {
+            console.log('✅ Using stored name for host:', storedName);
+            setUserName(storedName);
+          } else {
+            console.log('📝 Prompting host to enter their name');
+            // Prompt host to enter their name
+            setIsNamePromptOpen(true);
+          }
         } else {
-          setIsNamePromptOpen(true);
+          console.log('👥 User is joining existing room');
+          // This is a joining participant
+          const storedName = typeof window !== 'undefined' ? localStorage.getItem('vh_userName') : '';
+          console.log('💾 Stored name for guest:', storedName);
+          
+          if (storedName && storedName.trim() !== '') {
+            setUserName(storedName);
+          } else {
+            setIsNamePromptOpen(true);
+          }
         }
+      } catch (error) {
+        console.error('❌ Error checking participants:', error);
+        // Fallback to prompting for name
+        setIsNamePromptOpen(true);
       }
     };
     
     checkFirstParticipant();
-  }, [roomId]);
-
+  }, [roomId, isHydrated]);
   // Handle name submit
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1830,7 +1857,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         localStorage.setItem('vh_userName', nameInput.trim());
       }
       setIsNamePromptOpen(false);
-    }  };
+      setNameInput(''); // Clear the input after submission
+    }
+  };
 
   // Avatar handling functions
   const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -2247,85 +2276,115 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     }
     setIsMicOn(!isMicOn);
   };
-  // YouTube Time Tracking with direct API approach
+
+  // Voice activity detection functions
+  const startVoiceActivityDetection = useCallback(async (stream: MediaStream) => {
+    try {
+      // Clean up existing audio context if any
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+
+      // Create new audio context
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioContext;
+
+      // Create analyser node
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+      analyserRef.current = analyser;
+
+      // Connect stream to analyser
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      // Start monitoring voice activity
+      const monitorVoiceActivity = () => {
+        if (!analyserRef.current) return;
+
+        const bufferLength = analyserRef.current.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        analyserRef.current.getByteFrequencyData(dataArray);
+
+        // Calculate average volume
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / bufferLength;
+        
+        // Convert to 0-100 scale
+        const voiceLevel = Math.min(100, (average / 255) * 100);
+        setVoiceLevel(voiceLevel);
+
+        // Determine if speaking (threshold can be adjusted)
+        const speakingThreshold = 10;
+        setIsSpeaking(voiceLevel > speakingThreshold);
+
+        animationFrameRef.current = requestAnimationFrame(monitorVoiceActivity);
+      };
+
+      monitorVoiceActivity();
+    } catch (error) {
+      console.error("Error setting up voice activity detection:", error);
+    }
+  }, []);
+
+  const stopVoiceActivityDetection = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    
+    analyserRef.current = null;
+    setIsSpeaking(false);
+    setVoiceLevel(0);
+  }, []);
+  // Monitor LiveKit participants for voice activity
   useEffect(() => {
-    if (!isYouTubeVideo || !mediaFrameRef.current) return;
-    
-    console.log("🕒 Setting up YouTube time tracking");
+    if (!livekit.room) return;
 
-    // Function to get current time from YouTube iframe
-    const requestYouTubeTimeUpdate = () => {
-      if (!mediaFrameRef.current?.contentWindow) return;
-      
-      try {
-        // Try all possible methods to ensure we get time updates
-        
-        // Method 1: Direct postMessage command
-        mediaFrameRef.current.contentWindow.postMessage(JSON.stringify({
-          event: 'command',
-          func: 'getCurrentTime',
-          args: []
-        }), '*');
-        
-        mediaFrameRef.current.contentWindow.postMessage(JSON.stringify({
-          event: 'command',
-          func: 'getDuration',
-          args: []
-        }), '*');
-        
-        // Method 2: Get player info
-        mediaFrameRef.current.contentWindow.postMessage(JSON.stringify({
-          event: 'command',
-          func: 'getVideoStats', 
-          args: []
-        }), '*');
-        
-        // Method 3: Try directly requesting player state (triggers info delivery)
-        mediaFrameRef.current.contentWindow.postMessage(JSON.stringify({
-          event: 'command',
-          func: 'getPlayerState',
-          args: []
-        }), '*');
-      } catch (e) {
-        console.error("Error requesting YouTube time update:", e);
+    const handleParticipantAudioTrack = (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      if (track.kind === 'audio') {
+        // You can implement similar voice activity detection for remote participants
+        // This would require access to the audio track's media stream
+        console.log(`Audio track from ${participant.identity}:`, track);
       }
     };
-    
-    // Initial request with slight delay to ensure iframe is fully loaded
-    const initialTimeoutId = setTimeout(() => {
-      // Initialize API
-      if (mediaFrameRef.current?.contentWindow) {
-        mediaFrameRef.current.contentWindow.postMessage('{"event":"listening","id":"kosmi"}', '*');
-      }
-      
-      // Wait a bit more, then request time updates
-      setTimeout(requestYouTubeTimeUpdate, 500);
-    }, 1000);
-    
-    // Set up recurring time updates - updating every 250ms for smoother progress
-    const timeUpdateIntervalId = setInterval(requestYouTubeTimeUpdate, 250);
-    
+
+    livekit.room.on('trackSubscribed', handleParticipantAudioTrack);
+
     return () => {
-      clearTimeout(initialTimeoutId);
-      clearInterval(timeUpdateIntervalId);
+      if (livekit.room) {
+        livekit.room.off('trackSubscribed', handleParticipantAudioTrack);
+      }
     };
-  }, [isYouTubeVideo]);
+  }, [livekit.room]);
 
-  // Prevent hydration mismatch by only rendering after hydration
-  if (!isHydrated) {
-    return (
-      <div className="flex h-screen bg-background text-foreground overflow-hidden items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading room...</p>
-        </div>
-      </div>
-    );
-  }
+  // Start/stop voice activity detection when mic is toggled
+  useEffect(() => {
+    if (isMicOn && localStream) {
+      startVoiceActivityDetection(localStream);
+    } else {
+      stopVoiceActivityDetection();
+    }
+
+    return () => {
+      stopVoiceActivityDetection();
+    };  }, [isMicOn, localStream, startVoiceActivityDetection, stopVoiceActivityDetection]);
+
   return (
     <TooltipProvider>
-      <div className="flex h-screen bg-background text-foreground overflow-hidden">        {/* Main Area Container */}
-        <div className="flex-1 flex flex-col">{/* Top Bar */}
+      <div className="flex h-screen bg-background text-foreground overflow-hidden">
+        {/* Main Area Container */}
+        <div className="flex-1 flex flex-col">
+          {/* Top Bar */}
           <header className="p-3 flex justify-center items-center border-b border-border bg-card/50 backdrop-blur-sm relative">
             {/* Left side spacer for symmetry */}
             <div className="absolute left-3 flex items-center gap-2">
@@ -2336,14 +2395,16 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 <TooltipContent><p>Notifications</p></TooltipContent>
               </Tooltip>
             </div>
-              {/* Centered room name */}
+            
+            {/* Centered room name */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="text-lg font-semibold hover:bg-primary/10">
                   {roomName || `${roomId.split(/[-']/)[0]}'s room`}
                   <ChevronDown className="h-5 w-5 ml-1" />
                 </Button>
-              </DropdownMenuTrigger>              <DropdownMenuContent className="w-72 p-0">
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-72 p-0">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-border">
                   <h3 className="text-lg font-semibold">Rooms</h3>
@@ -2415,7 +2476,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   </div>
                 </div>
               </DropdownMenuContent>
-            </DropdownMenu>            {/* Right side controls */}
+            </DropdownMenu>
+            
+            {/* Right side controls */}
             <div className="absolute right-3 flex items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -2426,7 +2489,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </TooltipTrigger>
                 <TooltipContent><p>Participants ({allParticipants.length})</p></TooltipContent>
               </Tooltip>
-               <Tooltip>
+              
+              <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" onClick={handleToggleFullscreen}><Maximize className="h-5 w-5" /></Button>
                 </TooltipTrigger>
@@ -2434,11 +2498,15 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </Tooltip>
               <Button variant="ghost" size="sm" asChild className="group text-destructive hover:bg-destructive/10 hover:text-destructive">
                 <Link href="/">
-                  <LogOut className="h-4 w-4 mr-1 md:mr-2 group-hover:text-destructive" /> <span className="hidden md:inline group-hover:text-destructive">Leave</span>
+                  <LogOut className="h-4 w-4 mr-1 md:mr-2 group-hover:text-destructive" /> 
+                  <span className="hidden md:inline group-hover:text-destructive">Leave</span>
                 </Link>
               </Button>
             </div>
-          </header>          {/* Content Area */}          <main 
+          </header>
+          
+          {/* Content Area */}
+          <main 
             className="flex-1 flex flex-col items-center justify-start p-9 p-4 bg-background relative" 
             ref={mainMediaContainerRef}
             style={backgroundThemes[selectedTheme].image ? {
@@ -2469,7 +2537,11 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   objectFit: 'contain',
                   backgroundColor: '#000'
                 }}
-              />                {/* LiveKit screen share will be handled by track subscription events to the main videoRef */}              <iframe 
+              />
+              
+              {/* LiveKit screen share will be handled by track subscription events to the main videoRef */}
+              
+              <iframe 
                 ref={mediaFrameRef} 
                 className="absolute inset-0 w-full h-full border-0 rounded-md hidden" 
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen; camera; microphone"
@@ -2477,18 +2549,20 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox allow-downloads"
                 title="Media Content"
               ></iframe>
-              <div ref={placeholderContentRef} className="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
+                <div ref={placeholderContentRef} className="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
                 <h2 className="text-2xl font-semibold text-muted-foreground mb-4">Your virtual space is ready.</h2>
                 {isHost && (
                  <Button size="lg" className="bg-primary hover:bg-primary/80" onClick={() => setIsSelectMediaModalOpen(true)}>
                     <PlaySquare className="h-6 w-6 mr-2" /> Select Media
                  </Button>
                 )}
-                <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>              </div>              {/* Media Control Bar - Positioned as overlay above YouTube controls */}
+                <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>
+              </div>
+
+              {/* Media Control Bar - Positioned as overlay above YouTube controls */}
               {isMediaActive && (
                 <div 
                   className={cn(
-                   
                     "absolute bottom-0 left-0 right-0 bg-black/40 backdrop-blur-sm p-2 rounded-b-lg transition-all duration-300 hover:bg-black/60 flex flex-col gap-1.5",
                     showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
                   )}
@@ -2496,7 +2570,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   onMouseLeave={handleMouseLeave}
                   onMouseMove={handleMouseMove}
                 >
-                  {/* Progress Bar and Time */}                  <div className="flex items-center gap-2 px-1">
+                  {/* Progress Bar and Time */}
+                  <div className="flex items-center gap-2 px-1">
                     <span className="text-xs text-white w-12 text-center">{currentTimeDisplay}</span>
                     {isHost ? (
                     <Slider
@@ -2526,6 +2601,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     )}
                     <span className="text-xs text-white w-12 text-center">{durationDisplay}</span>
                   </div>
+
                    {/* Media Source Text */}
                   {mediaSourceText && <div className="text-center text-xs text-gray-300 -mt-0.5 mb-0.5">{mediaSourceText}</div>}
 
@@ -2556,7 +2632,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                              {mediaState.isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                           </Button>
                         </TooltipTrigger>
-                            <TooltipContent><p>{mediaState.isPlaying ? "Pause" : "Play"}</p></TooltipContent>                      </Tooltip>
+                        <TooltipContent><p>{mediaState.isPlaying ? "Pause" : "Play"}</p></TooltipContent>
+                      </Tooltip>
                         </>
                       )}
                       
@@ -2590,7 +2667,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     </div>
                     <div className="flex items-center gap-2">
                       {isYouTubeVideo && <Youtube className="h-5 w-5 text-red-500 hidden md:inline" />}
-                      <span className="text-xs text-white font-semibold bg-black/30 px-1.5 py-0.5 rounded hidden md:inline">HD</span>                      <Tooltip>
+                      <span className="text-xs text-white font-semibold bg-black/30 px-1.5 py-0.5 rounded hidden md:inline">HD</span>
+                      <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             variant="default"
@@ -2627,18 +2705,31 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     </div>
                   </div>
                 </div>
-              )}            </div>
-              {/* Participant Avatars */}
+              )}
+            </div>
+
+            {/* Participant Avatars */}
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-4/5 md:max-w-3/4 lg:max-w-1/2 h-auto pb-1 pt-2 px-4 bg-muted/30 rounded-t-xl flex justify-center items-end space-x-2 md:space-x-3 shadow-xl backdrop-blur-sm">
               {/* Firebase participants */}
               {allParticipants.map(user => {
                 const isCurrentUser = user.id === `${userName}_${isHost ? 'host' : 'guest'}_${roomId}`;
+                const userIsSpeaking = isCurrentUser ? isSpeaking : participantSpeaking[user.id];
+                const userVoiceLevel = isCurrentUser ? voiceLevel : (participantVoiceLevels[user.id] || 0);
+                
                 return (
                   <div key={user.id} className="flex flex-col items-center text-center">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="relative">                          {isCurrentUser && isCameraOn ? (
-                            <div className={`h-20 w-20 md:h-28 md:w-28 lg:h-32 lg:w-32 xl:h-36 xl:w-36 rounded-full overflow-hidden border-2 ${isHost ? 'border-accent ring-4 ring-accent/50' : 'border-primary ring-2 ring-primary/50'} mb-0.5 hover:scale-105 transition-all duration-300 cursor-pointer shadow-xl`}>
+                        <div className="relative">
+                          {isCurrentUser && isCameraOn ? (
+                            <div className={cn(
+                              "h-20 w-20 md:h-28 md:w-28 lg:h-32 lg:w-32 xl:h-36 xl:w-36 rounded-full overflow-hidden border-4 mb-0.5 hover:scale-105 transition-all duration-300 cursor-pointer shadow-xl",
+                              userIsSpeaking 
+                                ? "border-green-500 ring-4 ring-green-500/50" 
+                                : isHost 
+                                  ? "border-accent ring-4 ring-accent/50" 
+                                  : "border-primary ring-2 ring-primary/50"
+                            )}>
                               <video
                                 ref={localVideoRef}
                                 autoPlay
@@ -2646,23 +2737,70 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                                 muted
                                 className="w-full h-full object-cover"
                               />
+                              
+                              {/* Voice level indicator */}
+                              {userIsSpeaking && (
+                                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-12 h-1 bg-black/50 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-green-400 transition-all duration-150"
+                                    style={{ width: `${userVoiceLevel}%` }}
+                                  />
+                                </div>
+                              )}
                             </div>
                           ) : (
-                            <Avatar className={`h-12 w-12 md:h-16 md:w-16 border-2 ${user.isHost ? 'border-accent ring-4 ring-accent/50' : 'border-primary ring-2 ring-primary/50'} mb-0.5 hover:scale-110 transition-transform cursor-pointer`}>
-                              <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint={user.hint} />
-                              <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                            </Avatar>
+                            <div className="relative">
+                              <Avatar className={cn(
+                                "h-12 w-12 md:h-16 md:w-16 border-4 mb-0.5 hover:scale-110 transition-transform cursor-pointer",
+                                userIsSpeaking 
+                                  ? "border-green-500 ring-4 ring-green-500/50" 
+                                  : user.isHost 
+                                    ? "border-accent ring-4 ring-accent/50" 
+                                    : "border-primary ring-2 ring-primary/50"
+                              )}>
+                                <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint={user.hint} />
+                                <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                              </Avatar>
+                              
+                              {/* Voice level indicator for avatar */}
+                              {userIsSpeaking && (
+                                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1 bg-black/50 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-green-400 transition-all duration-150"
+                                    style={{ width: `${userVoiceLevel}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
                           )}
+                          
                           {user.isHost && (
                             <span className="absolute -top-2 -right-2">
                               <Crown className="h-5 w-5 text-yellow-400 drop-shadow" />
                             </span>
                           )}
+                          
+                          {/* Speaking indicator pulse */}
+                          {userIsSpeaking && (
+                            <div className="absolute inset-0 rounded-full border-2 border-green-400 animate-pulse" />
+                          )}
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent><p>{user.isHost ? `${user.name} (Host)` : user.name}</p></TooltipContent>
+                      <TooltipContent>
+                        <p>{user.isHost ? `${user.name} (Host)` : user.name}</p>
+                        {userIsSpeaking && <p className="text-xs text-green-400">Speaking</p>}
+                      </TooltipContent>
                     </Tooltip>
-                    <span className={`text-xs max-w-[60px] truncate ${user.isHost ? 'font-semibold text-accent' : 'text-muted-foreground'}`}>{user.name}</span>
+                    <span className={cn(
+                      "text-xs max-w-[60px] truncate transition-colors",
+                      userIsSpeaking 
+                        ? "text-green-400 font-semibold" 
+                        : user.isHost 
+                          ? "font-semibold text-accent" 
+                          : "text-muted-foreground"
+                    )}>
+                      {user.name}
+                    </span>
                   </div>
                 );
               })}
@@ -2674,32 +2812,63 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     fbParticipant.name === lkParticipant.name || fbParticipant.name === lkParticipant.identity
                   )
                 )
-                .map(lkParticipant => (
-                  <div key={`livekit-${lkParticipant.identity}`} className="flex flex-col items-center text-center">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="relative">                          <Avatar className="h-12 w-12 md:h-16 md:w-16 border-2 border-green-500 ring-2 ring-green-500/50 mb-0.5 hover:scale-110 transition-transform cursor-pointer">
-                            <AvatarFallback className="bg-green-100 text-green-700">
-                              {(lkParticipant.name || lkParticipant.identity).charAt(0)}
-                           
-                            </AvatarFallback>
-                          </Avatar>
-                          {lkParticipant.screenShareTrack && (
-                            <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs px-1 rounded-full">
-                              📺
-                            </span>
-                          )}
-                        </div>
-                      </TooltipTrigger>                      <TooltipContent>
-                        <p>{lkParticipant.name || lkParticipant.identity} (LiveKit)</p>
-                        {lkParticipant.screenShareTrack && <p className="text-xs text-blue-400">Screen sharing</p>}
-                      </TooltipContent>
-                    </Tooltip>
-                    <span className="text-xs max-w-[60px] truncate text-green-600 font-medium">
-                      {lkParticipant.name || lkParticipant.identity}
-                    </span>
-                  </div>
-                ))
+                .map(lkParticipant => {
+                  const participantIsSpeaking = participantSpeaking[lkParticipant.identity];
+                  const participantVoiceLevel = participantVoiceLevels[lkParticipant.identity] || 0;
+                  
+                  return (
+                    <div key={`livekit-${lkParticipant.identity}`} className="flex flex-col items-center text-center">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="relative">
+                            <Avatar className={cn(
+                              "h-12 w-12 md:h-16 md:w-16 border-4 mb-0.5 hover:scale-110 transition-transform cursor-pointer",
+                              participantIsSpeaking 
+                                ? "border-green-500 ring-4 ring-green-500/50" 
+                                : "border-green-500 ring-2 ring-green-500/50"
+                            )}>
+                              <AvatarFallback className="bg-green-100 text-green-700">
+                                {(lkParticipant.name || lkParticipant.identity).charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            
+                            {/* Voice level indicator */}
+                            {participantIsSpeaking && (
+                              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1 bg-black/50 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-green-400 transition-all duration-150"
+                                  style={{ width: `${participantVoiceLevel}%` }}
+                                />
+                              </div>
+                            )}
+                            
+                            {lkParticipant.screenShareTrack && (
+                              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs px-1 rounded-full">
+                                📺
+                              </span>
+                            )}
+                            
+                            {/* Speaking indicator pulse */}
+                            {participantIsSpeaking && (
+                              <div className="absolute inset-0 rounded-full border-2 border-green-400 animate-pulse" />
+                            )}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{lkParticipant.name || lkParticipant.identity} (LiveKit)</p>
+                          {lkParticipant.screenShareTrack && <p className="text-xs text-blue-400">Screen sharing</p>}
+                          {participantIsSpeaking && <p className="text-xs text-green-400">Speaking</p>}
+                        </TooltipContent>
+                      </Tooltip>
+                      <span className={cn(
+                        "text-xs max-w-[60px] truncate font-medium transition-colors",
+                        participantIsSpeaking ? "text-green-400" : "text-green-600"
+                      )}>
+                        {lkParticipant.name || lkParticipant.identity}
+                      </span>
+                    </div>
+                  );
+                })
               }
             </div>
           </main>
@@ -2709,7 +2878,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         <aside className="w-80 lg:w-96 bg-card border-l border-border flex flex-col">
           <div className="p-4 border-b border-border">
             <h2 className="text-xl font-semibold mb-3 flex items-center justify-between font-headline">
-              Room Menu              <Tooltip>
+              Room Menu
+              <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
                     variant="ghost" 
@@ -2728,7 +2898,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 <Button className="w-full mb-3 bg-primary/90 hover:bg-primary">
                   <UserPlus className="h-5 w-5 mr-2" /> Invite Friends
                 </Button>
-              </DialogTrigger>              <DialogContent className="sm:max-w-md">
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Invite to room</DialogTitle>
                 </DialogHeader>
@@ -2748,7 +2919,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                       Copy link
                     </Button>
                   </div>
-                   <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Paste the link into any email or messaging app message.
                   </p>
                 </div>
@@ -2756,19 +2927,36 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             </Dialog>
             
             <div className="flex items-center justify-around gap-2">
-               <Tooltip>
+              <Tooltip>
                 <TooltipTrigger asChild>
-                   <Button 
+                  <Button 
                     onClick={handleMicToggle}
-                    className="flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground shadow-md active:shadow-inner active:translate-y-px border-b-4 border-muted"
+                    className={cn(
+                      "flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground shadow-md active:shadow-inner active:translate-y-px border-b-4 border-muted relative",
+                      isSpeaking && "ring-2 ring-green-400 border-green-400"
+                    )}
                     size="icon"
                     suppressHydrationWarning
                   >
                     {isMicOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5 text-destructive" />}
+                    
+                    {/* Voice level indicator on mic button */}
+                    {isMicOn && isSpeaking && (
+                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-black/20 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-green-400 transition-all duration-150"
+                          style={{ width: `${voiceLevel}%` }}
+                        />
+                      </div>
+                    )}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent><p>{isMicOn ? "Mute Mic" : "Unmute Mic"}</p></TooltipContent>
+                <TooltipContent>
+                  <p>{isMicOn ? "Mute Mic" : "Unmute Mic"}</p>
+                  {isSpeaking && <p className="text-xs text-green-400">Speaking</p>}
+                </TooltipContent>
               </Tooltip>
+              
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
@@ -2784,6 +2972,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               </Tooltip>
             </div>
           </div>
+          
           <div className="p-2 text-sm text-muted-foreground border-b border-border">
             <Users className="h-4 w-4 inline mr-1" /> {allParticipants.length} online
           </div>
@@ -2826,6 +3015,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             })}
             <div ref={messagesEndRef} />
           </ScrollArea>
+          
           <form onSubmit={handleSendMessage} className="p-3 border-t border-border flex gap-2 bg-card">
             <Input
               type="text"
@@ -2844,25 +3034,24 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             >
               <Send className="h-5 w-5" />
             </Button>
-          </form>
-        </aside>
+          </form>        </aside>
 
         {/* Select Media Modal (Dialog) */}
-         <Dialog open={isSelectMediaModalOpen} onOpenChange={setIsSelectMediaModalOpen}>
-            <DialogContent 
-              className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl w-[95vw] md:w-[90vw] h-auto md:h-[90vh] p-0 border-0 bg-transparent shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
-              onOpenAutoFocus={(e) => e.preventDefault()}
-            >
-              <DialogHeader className="sr-only">
-                <DialogTitle>Select Media</DialogTitle>
-                <DialogDescription>Choose content to share in the room.</DialogDescription>
-              </DialogHeader>
-              <SelectMediaModal 
-                onShareScreen={handleShareScreen} 
-                onPlayUrl={handlePlayUrl} 
-              />
-            </DialogContent>
-          </Dialog>
+        <Dialog open={isSelectMediaModalOpen} onOpenChange={setIsSelectMediaModalOpen}>
+          <DialogContent 
+            className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl w-[95vw] md:w-[90vw] h-auto md:h-[90vh] p-0 border-0 bg-transparent shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
+            onOpenAutoFocus={(e) => e.preventDefault()}
+          >
+            <DialogHeader className="sr-only">
+              <DialogTitle>Select Media</DialogTitle>
+              <DialogDescription>Choose content to share in the room.</DialogDescription>
+            </DialogHeader>
+            <SelectMediaModal 
+              onShareScreen={handleShareScreen} 
+              onPlayUrl={handlePlayUrl} 
+            />
+          </DialogContent>
+        </Dialog>
 
         {/* Participants Dialog */}
         <Dialog open={isParticipantsOpen} onOpenChange={setIsParticipantsOpen}>
@@ -2919,25 +3108,31 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               ))}
             </ul>
           </DialogContent>
-        </Dialog>
-
-        {/* Name Prompt Modal */}
-        <Dialog open={isNamePromptOpen}>
+        </Dialog>        {/* Name Prompt Modal */}
+        <Dialog open={isNamePromptOpen} onOpenChange={setIsNamePromptOpen}>
           <DialogContent className="max-w-xs">
             <DialogHeader>
-              <DialogTitle>Enter your name</DialogTitle>
+              <DialogTitle>{isHost ? 'Welcome, Room Host!' : 'Enter your name'}</DialogTitle>
+              {isHost && (
+                <p className="text-sm text-muted-foreground">
+                  As the room creator, you'll have host privileges. What should we call you?
+                </p>
+              )}
             </DialogHeader>
             <form onSubmit={handleNameSubmit} className="flex flex-col gap-3">
               <Input
                 autoFocus
-                placeholder="Your name"
+                placeholder={isHost ? "Enter your name" : "Your name"}
                 value={nameInput}
                 onChange={e => setNameInput(e.target.value)}
                 maxLength={20}
                 required
               />
-              <Button type="submit" className="w-full">Join Room</Button>
-            </form>          </DialogContent>
+              <Button type="submit" className="w-full">
+                {isHost ? 'Create Room' : 'Join Room'}
+              </Button>
+            </form>
+          </DialogContent>
         </Dialog>
 
         {/* Theme Selection Modal */}
@@ -2986,7 +3181,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </button>
               ))}
             </div>
-          </DialogContent>        </Dialog>        {/* Room Settings Modal */}
+          </DialogContent>
+        </Dialog>
+
+        {/* Room Settings Modal */}
         <Dialog open={isRoomSettingsOpen} onOpenChange={handleRoomSettingsClose}>
           <DialogContent className="max-w-md p-0 gap-0 bg-card/95 backdrop-blur-md border-border">
             <DialogHeader className="p-6 pb-4">
@@ -3000,7 +3198,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   >
                     <ChevronRight className="h-4 w-4 rotate-180" />
                   </Button>
-                )}                <DialogTitle className="text-foreground text-xl font-semibold">
+                )}
+                <DialogTitle className="text-foreground text-xl font-semibold">
                   {roomSettingsView === 'main' && 'Room Settings'}
                   {roomSettingsView === 'appearance' && 'Choose Background'}
                   {roomSettingsView === 'avatar' && 'Choose Avatar'}
@@ -3047,7 +3246,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                       </div>
                       <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
                     </div>
-                  </div>                  {/* Room Name Section */}
+                  </div>
+
+                  {/* Room Name Section */}
                   <div className="bg-muted/50 hover:bg-muted transition-colors rounded-lg p-4">
                     {isEditingRoomName ? (
                       <div className="space-y-3">
@@ -3118,7 +3319,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                       <span className="text-foreground font-medium">Appearance</span>
                     </div>
                     <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  </div>                  {/* Visibility Section */}
+                  </div>
+
+                  {/* Visibility Section */}
                   <div 
                     className="bg-muted/50 hover:bg-muted transition-colors rounded-lg p-4 flex items-center justify-between cursor-pointer group"
                     onClick={handleToggleVisibility}
@@ -3157,7 +3360,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                         }`} />
                       </div>
                     </div>
-                  </div>                  {/* Security Section */}
+                  </div>
+
+                  {/* Security Section */}
                   <div 
                     className="bg-muted/50 hover:bg-muted transition-colors rounded-lg p-4 flex items-center justify-between cursor-pointer group"
                     onClick={() => setRoomSettingsView('security')}
@@ -3284,18 +3489,16 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                               className="w-12 h-12 rounded-full object-cover"
                             />
                           ) : (
-                            <div 
-                              className="w-12 h-12 rounded-full flex items-center justify-center"
-                              style={{ backgroundColor: option.color }}
-                            >
-                              <span className="text-white text-lg font-bold">
-                                {userName.charAt(0).toUpperCase() || 'T'}
+                            <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+                              <span className="text-primary-foreground text-lg font-bold">
+                                {option.name.charAt(0)}
                               </span>
                             </div>
                           )}
-                          <span className="text-xs text-foreground font-medium">{option.name}</span>
+                          <span className="text-xs text-center">{option.name}</span>
                         </button>
-                      ))}                    </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
@@ -3368,10 +3571,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </div>
               )}
             </div>
-          </DialogContent>        </Dialog>
-
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );
 }
-
