@@ -15,7 +15,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MountainIcon } from 'lucide-react'; // Using MountainIcon as a placeholder logo
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { MountainIcon, Menu, Plus, Users } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
 
@@ -24,6 +32,7 @@ export default function Navbar() {
   const { toast } = useToast();
   const [isJoinRoomDialogOpen, setIsJoinRoomDialogOpen] = useState(false);
   const [joinRoomInput, setJoinRoomInput] = useState('');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleJoinRoom = () => {
     if (!joinRoomInput.trim()) {
@@ -68,38 +77,86 @@ export default function Navbar() {
     const uniqueRoomId = `room-${generateRandomSuffix()}`;
     router.push(`/room/${uniqueRoomId}`);
   };
-
   return (
     <>
-      <header className="sticky top-0 z-50 w-full border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="container flex h-16 items-center">
-          <Link href="/" className="mr-6 flex items-center space-x-2">
-            <MountainIcon className="h-6 w-6 text-primary" />
-            <span className="font-bold text-xl sm:inline-block font-headline text-foreground">OurScreen</span>
+      <header className="sticky top-0 z-50 w-full border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60 mobile-header-safe">
+        <div className="container flex h-14 sm:h-16 items-center px-4">
+          <Link href="/" className="mr-4 sm:mr-6 flex items-center space-x-2 min-w-0">
+            <MountainIcon className="h-5 w-5 sm:h-6 sm:w-6 text-primary flex-shrink-0" />
+            <span className="font-bold text-lg sm:text-xl font-headline text-foreground truncate">OurScreen</span>
           </Link>
-          <nav className="flex flex-1 items-center space-x-4 sm:space-x-6">
+          
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex flex-1 items-center space-x-6">
             {/* Future nav links can go here: Features, Pricing, About */}
           </nav>
-          <div className="flex items-center space-x-2">
+          
+          {/* Desktop Actions */}
+          <div className="hidden md:flex items-center space-x-2">
             <Button
               variant="ghost"
               className="text-foreground hover:bg-primary/10 hover:text-primary"
               onClick={() => setIsJoinRoomDialogOpen(true)}
             >
+              <Users className="h-4 w-4 mr-2" />
               Join Room
             </Button>
             <Button 
               onClick={handleQuickCreateRoom} 
               className="bg-primary hover:bg-primary/80 text-primary-foreground"
             >
+              <Plus className="h-4 w-4 mr-2" />
               Create Room
             </Button>
           </div>
-        </div>
-      </header>
 
-      <Dialog open={isJoinRoomDialogOpen} onOpenChange={setIsJoinRoomDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+          {/* Mobile Menu */}
+          <div className="md:hidden ml-auto">
+            <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Toggle menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-80 sm:w-96">
+                <SheetHeader>
+                  <SheetTitle className="text-left">Menu</SheetTitle>
+                  <SheetDescription className="text-left">
+                    Create or join a room to get started.
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="grid gap-4 py-6">
+                  <Button 
+                    onClick={() => {
+                      handleQuickCreateRoom();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full bg-primary hover:bg-primary/80 text-primary-foreground justify-start"
+                    size="lg"
+                  >
+                    <Plus className="h-5 w-5 mr-3" />
+                    Create Room
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    size="lg"
+                    onClick={() => {
+                      setIsJoinRoomDialogOpen(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                  >
+                    <Users className="h-5 w-5 mr-3" />
+                    Join Room
+                  </Button>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+        </div>
+      </header>      <Dialog open={isJoinRoomDialogOpen} onOpenChange={setIsJoinRoomDialogOpen}>
+        <DialogContent className="sm:max-w-[425px] mx-4 w-[calc(100vw-2rem)]">
           <DialogHeader>
             <DialogTitle>Join Room</DialogTitle>
             <DialogDescription>
@@ -107,15 +164,14 @@ export default function Navbar() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="room-link-input" className="text-right">
+            <div className="grid gap-2">
+              <Label htmlFor="room-link-input">
                 Room ID/Link
               </Label>
               <Input
                 id="room-link-input"
                 value={joinRoomInput}
                 onChange={(e) => setJoinRoomInput(e.target.value)}
-                className="col-span-3"
                 placeholder="e.g., awesome-party or https://.../room/awesome-party"
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') {
@@ -125,20 +181,21 @@ export default function Navbar() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button 
               variant="outline" 
               onClick={() => {
                 setIsJoinRoomDialogOpen(false);
                 setJoinRoomInput('');
               }}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
             <Button 
               type="submit" 
               onClick={handleJoinRoom}
-              className="bg-primary hover:bg-primary/80 text-primary-foreground"
+              className="bg-primary hover:bg-primary/80 text-primary-foreground w-full sm:w-auto"
             >
               Join
             </Button>

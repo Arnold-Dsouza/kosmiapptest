@@ -96,42 +96,39 @@ export default function Home() {
     router.push(`/room/${uniqueRoomId}`);
   };
 
-  return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground">
+  return (    <div className="flex flex-col min-h-screen bg-background text-foreground mobile-safe">
       <Navbar />
       <main className="flex-grow">
         {/* Hero Section */}
-        <section className="py-20 md:py-32 bg-gradient-to-br from-background to-secondary/30">
-          <div className="container text-center">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight font-headline">
+        <section className="py-12 sm:py-20 md:py-32 bg-gradient-to-br from-background to-secondary/30 px-4">
+          <div className="container text-center max-w-4xl mx-auto">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight font-headline leading-tight">
               Your Space, Your Rules. <span className="text-primary">Instantly.</span>
             </h1>
-            <p className="mt-6 max-w-2xl mx-auto text-lg sm:text-xl text-muted-foreground">
+            <p className="mt-4 sm:mt-6 max-w-2xl mx-auto text-base sm:text-lg md:text-xl text-muted-foreground px-4">
               Create a room, invite your friends, and enjoy videos, games, and more together. 
               No sign-up needed, completely free.
             </p>
-            <div className="mt-10 max-w-md mx-auto flex flex-col sm:flex-row justify-center">
+            <div className="mt-8 sm:mt-10 max-w-md mx-auto flex flex-col gap-3 px-4">
               <Button 
                 size="lg" 
-                className="h-12 text-base shadow-md hover:shadow-lg transition-shadow bg-primary hover:bg-primary/80 text-primary-foreground"
+                className="h-12 sm:h-14 text-base sm:text-lg shadow-md hover:shadow-lg transition-shadow bg-primary hover:bg-primary/80 text-primary-foreground w-full"
                 onClick={() => setIsCreateRoomDialogOpen(true)}
               >
                 Create Room With Name
               </Button>
+              <p className="text-sm text-muted-foreground">
+                or <Button variant="link" className="text-primary p-0 h-auto text-sm" onClick={handleQuickCreateRoom}>create a quick room</Button>
+              </p>
             </div>
-            <p className="mt-4 text-sm text-muted-foreground">
-              or <Button variant="link" className="text-primary p-0 h-auto" onClick={handleQuickCreateRoom}>create a quick room</Button>
-            </p>
           </div>
-        </section>
-
-        {/* Features Section */}
-        <section id="features" className="py-16 md:py-24 bg-background">
-          <div className="container">
-            <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 font-headline text-foreground">
+        </section>        {/* Features Section */}
+        <section id="features" className="py-12 sm:py-16 md:py-24 bg-background px-4">
+          <div className="container max-w-6xl mx-auto">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-8 sm:mb-12 font-headline text-foreground px-4">
               Everything You Need to <span className="text-primary">Connect & Play</span>
             </h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
               {features.map((feature) => (
                 <FeatureCard
                   key={feature.title}
@@ -144,17 +141,18 @@ export default function Home() {
               ))}
             </div>
           </div>
-        </section>
-
-        {/* Highlights Section */}
-        <section className="py-16 md:py-24 bg-secondary/20">
-          <div className="container">
-            <div className="grid md:grid-cols-3 gap-8 text-center">
-              {highlights.map((highlight) => (
-                <div key={highlight.text} className="p-6 bg-card rounded-lg shadow-md">
-                  <highlight.icon className="h-12 w-12 text-accent mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold mb-2 font-headline text-card-foreground">{highlight.text.split(':')[0]}</h3>
-                  <p className="text-muted-foreground">{highlight.text.split(':')[1]?.trim()}</p>
+        </section>        {/* Highlights Section */}
+        <section className="py-12 sm:py-16 md:py-24 bg-secondary/20 px-4">
+          <div className="container max-w-4xl mx-auto">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-8 sm:mb-12 font-headline text-foreground">
+              Why Choose <span className="text-primary">OurScreen</span>?
+            </h2>            <div className="grid gap-6 sm:gap-8 md:grid-cols-3">
+              {highlights.map((highlight, index) => (
+                <div key={index} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 p-4 sm:p-6 bg-card/50 rounded-lg border border-border">
+                  <div className="flex-shrink-0">
+                    <highlight.icon className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+                  </div>
+                  <p className="text-sm sm:text-base text-foreground font-medium leading-relaxed">{highlight.text}</p>
                 </div>
               ))}
             </div>
@@ -162,17 +160,17 @@ export default function Home() {
         </section>
 
         {/* Team Section */}
-        <section className="py-16 md:py-24 bg-background">
-          <div className="container">
-            <h2 className="text-3xl md:text-4xl font-bold text-center mb-4 font-headline text-foreground">
+        <section className="py-12 sm:py-16 md:py-24 bg-background px-4">
+          <div className="container max-w-4xl mx-auto">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-4 font-headline text-foreground">
               Meet the <span className="text-primary">Creator</span>
             </h2>
-            <p className="max-w-2xl mx-auto text-center text-lg text-muted-foreground mb-12">
+            <p className="max-w-2xl mx-auto text-center text-base sm:text-lg text-muted-foreground mb-8 sm:mb-12 px-4">
               Passionate about bringing people together through technology and creating seamless digital experiences.
             </p>
             <div className="max-w-md mx-auto">
-              <div className="bg-card rounded-xl shadow-lg p-8 text-center border border-border/50">
-                <div className="relative w-32 h-32 mx-auto mb-6">
+              <div className="bg-card rounded-xl shadow-lg p-6 sm:p-8 text-center border border-border/50">
+                <div className="relative w-24 h-24 sm:w-32 sm:h-32 mx-auto mb-6">
                   <Image
                     src="/images/creator.jpg"
                     alt="Creator Profile"
@@ -184,7 +182,7 @@ export default function Home() {
                     <Users className="h-4 w-4" />
                   </div>
                 </div>
-                <h3 className="text-xl font-bold text-card-foreground mb-2">Arnold Dsouza</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-card-foreground mb-2">Arnold Dsouza</h3>
                 <p className="text-primary font-semibold mb-3">Founder & Creator</p>
               
                 <div className="flex justify-center space-x-3">
@@ -194,36 +192,38 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </section>
-        
+        </section>        
         {/* "And More" Section */}
-        <section className="py-16 md:py-24 bg-background">
-          <div className="container text-center">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 font-headline text-foreground">And So Much More...</h2>
-            <p className="max-w-xl mx-auto text-lg text-muted-foreground mb-8">
+        <section className="py-12 sm:py-16 md:py-24 bg-background px-4">
+          <div className="container text-center max-w-4xl mx-auto">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 font-headline text-foreground">And So Much More...</h2>
+            <p className="max-w-xl mx-auto text-base sm:text-lg text-muted-foreground mb-6 sm:mb-8 px-4">
               OurScreen is packed with features to make your online gatherings unforgettable. From custom room settings to moderation tools, you're in control.
-            </p>            <Image 
-              src="/images/1200x600.jpg" 
-              alt="Collage of app features" 
-              width={1200} 
-              height={600}
-              className="rounded-lg shadow-xl mx-auto"
-              data-ai-hint="app collage features"
-            />
+            </p>            
+            <div className="overflow-hidden rounded-lg shadow-xl mx-auto max-w-full">
+              <Image 
+                src="/images/1200x600.jpg" 
+                alt="Collage of app features" 
+                width={1200} 
+                height={600}
+                className="w-full h-auto object-cover"
+                data-ai-hint="app collage features"
+              />
+            </div>
           </div>
         </section>
 
         {/* Final CTA Section */}
-        <section className="py-20 md:py-32 bg-primary text-primary-foreground">
-          <div className="container text-center">
-            <h2 className="text-3xl md:text-4xl font-bold mb-6 font-headline">Ready to Start Your Hub?</h2>
-            <p className="max-w-lg mx-auto text-lg text-primary-foreground/90 mb-8">
+        <section className="py-16 sm:py-20 md:py-32 bg-primary text-primary-foreground px-4 mobile-video-controls">
+          <div className="container text-center max-w-2xl mx-auto">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 sm:mb-6 font-headline">Ready to Start Your Hub?</h2>
+            <p className="max-w-lg mx-auto text-base sm:text-lg text-primary-foreground/90 mb-6 sm:mb-8 px-4">
               It takes just a click to create your own private space. No downloads, no hassle.
             </p>
             <Button 
               size="lg" 
               variant="secondary" 
-              className="text-lg h-14 px-8 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/80 text-accent-foreground" 
+              className="text-base sm:text-lg h-12 sm:h-14 px-6 sm:px-8 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/80 text-accent-foreground w-full sm:w-auto" 
               onClick={handleQuickCreateRoom}
             >
               Create Your Free Room Now
@@ -231,10 +231,8 @@ export default function Home() {
           </div>
         </section>
       </main>
-      <Footer />
-
-      <Dialog open={isCreateRoomDialogOpen} onOpenChange={setIsCreateRoomDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+      <Footer />      <Dialog open={isCreateRoomDialogOpen} onOpenChange={setIsCreateRoomDialogOpen}>
+        <DialogContent className="sm:max-w-[425px] mx-4 w-[calc(100vw-2rem)]">
           <DialogHeader>
             <DialogTitle>Set Room Name</DialogTitle>
             <DialogDescription>
@@ -242,15 +240,14 @@ export default function Home() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="room-name-modal" className="text-right">
+            <div className="grid gap-2">
+              <Label htmlFor="room-name-modal">
                 Name
               </Label>
               <Input
                 id="room-name-modal"
                 value={roomNameInput}
                 onChange={(e) => setRoomNameInput(e.target.value)}
-                className="col-span-3"
                 placeholder="e.g., movie-night"
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') {
@@ -260,12 +257,22 @@ export default function Home() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline"
+              onClick={() => {
+                setIsCreateRoomDialogOpen(false);
+                setRoomNameInput('');
+              }}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
             <Button 
               type="submit" 
               onClick={handleCreateRoom}
               disabled={!roomNameInput.trim()}
-              className="bg-primary hover:bg-primary/80 text-primary-foreground"
+              className="bg-primary hover:bg-primary/80 text-primary-foreground w-full sm:w-auto"
             >
               Create & Go
             </Button>

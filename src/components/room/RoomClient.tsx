@@ -250,10 +250,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   }, [roomName]);
   
   // Predefined background themes
-  const backgroundThemes = {
-    default: {
+  const backgroundThemes = {    default: {
       name: 'Default',
-      image: null as string | null,
+      image: '/images/moon.jpg',
       preview: '#1a1a1a'
     },
     space: {
@@ -2378,33 +2377,35 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     return () => {
       stopVoiceActivityDetection();
     };  }, [isMicOn, localStream, startVoiceActivityDetection, stopVoiceActivityDetection]);
-
   return (
     <TooltipProvider>
-      <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      <div className="flex flex-col lg:flex-row h-screen bg-background text-foreground overflow-hidden mobile-safe">
         {/* Main Area Container */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-h-0">
           {/* Top Bar */}
-          <header className="p-3 flex justify-center items-center border-b border-border bg-card/50 backdrop-blur-sm relative">
+          <header className="p-2 sm:p-3 flex justify-center items-center border-b border-border bg-card/50 backdrop-blur-sm relative mobile-header-safe">
             {/* Left side spacer for symmetry */}
-            <div className="absolute left-3 flex items-center gap-2">
+            <div className="absolute left-2 sm:left-3 flex items-center gap-1 sm:gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon"><Bell className="h-5 w-5" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10">
+                    <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent><p>Notifications</p></TooltipContent>
               </Tooltip>
-            </div>
-            
+            </div>            
             {/* Centered room name */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="text-lg font-semibold hover:bg-primary/10">
-                  {roomName || `${roomId.split(/[-']/)[0]}'s room`}
-                  <ChevronDown className="h-5 w-5 ml-1" />
+                <Button variant="ghost" className="text-base sm:text-lg font-semibold hover:bg-primary/10 px-2 sm:px-3">
+                  <span className="truncate max-w-[150px] sm:max-w-none">
+                    {roomName || `${roomId.split(/[-']/)[0]}'s room`}
+                  </span>
+                  <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 ml-1 flex-shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-72 p-0">
+              <DropdownMenuContent className="w-72 sm:w-80 p-0" align="center">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-border">
                   <h3 className="text-lg font-semibold">Rooms</h3>
@@ -2476,14 +2477,13 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                   </div>
                 </div>
               </DropdownMenuContent>
-            </DropdownMenu>
-            
+            </DropdownMenu>            
             {/* Right side controls */}
-            <div className="absolute right-3 flex items-center gap-2">
+            <div className="absolute right-2 sm:right-3 flex items-center gap-1 sm:gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={() => setIsParticipantsOpen(true)}>
-                    <Users className="h-5 w-5" />
+                  <Button variant="ghost" size="icon" onClick={() => setIsParticipantsOpen(true)} className="h-8 w-8 sm:h-10 sm:w-10">
+                    <Users className="h-4 w-4 sm:h-5 sm:w-5" />
                     <span className="sr-only">Show Participants</span>
                   </Button>
                 </TooltipTrigger>
@@ -2492,22 +2492,23 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={handleToggleFullscreen}><Maximize className="h-5 w-5" /></Button>
+                  <Button variant="ghost" size="icon" onClick={handleToggleFullscreen} className="h-8 w-8 sm:h-10 sm:w-10 hidden sm:flex">
+                    <Maximize className="h-4 w-4 sm:h-5 sm:w-5" />
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent><p>Fullscreen</p></TooltipContent>
               </Tooltip>
-              <Button variant="ghost" size="sm" asChild className="group text-destructive hover:bg-destructive/10 hover:text-destructive">
+              <Button variant="ghost" size="sm" asChild className="group text-destructive hover:bg-destructive/10 hover:text-destructive h-8 sm:h-9 px-2 sm:px-3">
                 <Link href="/">
-                  <LogOut className="h-4 w-4 mr-1 md:mr-2 group-hover:text-destructive" /> 
-                  <span className="hidden md:inline group-hover:text-destructive">Leave</span>
+                  <LogOut className="h-3 w-3 sm:h-4 sm:w-4 mr-1 group-hover:text-destructive" /> 
+                  <span className="hidden sm:inline group-hover:text-destructive text-xs sm:text-sm">Leave</span>
                 </Link>
               </Button>
             </div>
-          </header>
-          
+          </header>          
           {/* Content Area */}
           <main 
-            className="flex-1 flex flex-col items-center justify-start p-9 p-4 bg-background relative" 
+            className="flex-1 flex flex-col items-center justify-start p-2 sm:p-4 md:p-9 bg-background relative overflow-hidden" 
             ref={mainMediaContainerRef}
             style={backgroundThemes[selectedTheme].image ? {
               backgroundImage: `url('${backgroundThemes[selectedTheme].image}')`,
@@ -2519,9 +2520,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           >
             {/* Background overlay for better contrast - only show when there's a background image */}
             {backgroundThemes[selectedTheme].image && (
-              <div className="absolute inset-0 bg-black/20 backdrop-blur-sm"></div>
-            )}
-            
+              <div className="absolute inset-0 bg-black/20 "></div>
+            )}            
             <div 
               ref={videoContainerRef}
               className="w-full max-w-2xl aspect-[16/9] bg-black rounded-lg shadow-2xl relative border border-border overflow-hidden z-10"
@@ -2548,15 +2548,14 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 allowFullScreen
                 sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox allow-downloads"
                 title="Media Content"
-              ></iframe>
-                <div ref={placeholderContentRef} className="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
-                <h2 className="text-2xl font-semibold text-muted-foreground mb-4">Your virtual space is ready.</h2>
+              ></iframe>                <div ref={placeholderContentRef} className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 sm:p-8">
+                <h2 className="text-lg sm:text-2xl font-semibold text-muted-foreground mb-3 sm:mb-4 px-4">Your virtual space is ready.</h2>
                 {isHost && (
-                 <Button size="lg" className="bg-primary hover:bg-primary/80" onClick={() => setIsSelectMediaModalOpen(true)}>
-                    <PlaySquare className="h-6 w-6 mr-2" /> Select Media
+                 <Button size="lg" className="bg-primary hover:bg-primary/80 h-12 sm:h-14 px-6 sm:px-8" onClick={() => setIsSelectMediaModalOpen(true)}>
+                    <PlaySquare className="h-5 w-5 sm:h-6 sm:w-6 mr-2" /> Select Media
                  </Button>
                 )}
-                <p className="text-sm text-muted-foreground mt-4">Watch videos, share your screen, or play games together.</p>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-3 sm:mt-4 px-4 max-w-md">Watch videos, share your screen, or play games together.</p>
               </div>
 
               {/* Media Control Bar - Positioned as overlay above YouTube controls */}
@@ -2709,7 +2708,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             </div>
 
             {/* Participant Avatars */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-4/5 md:max-w-3/4 lg:max-w-1/2 h-auto pb-1 pt-2 px-4 bg-muted/30 rounded-t-xl flex justify-center items-end space-x-2 md:space-x-3 shadow-xl backdrop-blur-sm">
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-[90%] sm:max-w-4/5 md:max-w-3/4 lg:max-w-1/2 h-auto pb-1 pt-2 px-2 sm:px-4 bg-muted/30 rounded-t-xl flex justify-center items-end space-x-1 sm:space-x-2 md:space-x-3 shadow-xl backdrop-blur-sm mobile-scroll">
               {/* Firebase participants */}
               {allParticipants.map(user => {
                 const isCurrentUser = user.id === `${userName}_${isHost ? 'host' : 'guest'}_${roomId}`;
@@ -2717,7 +2716,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 const userVoiceLevel = isCurrentUser ? voiceLevel : (participantVoiceLevels[user.id] || 0);
                 
                 return (
-                  <div key={user.id} className="flex flex-col items-center text-center">
+                  <div key={user.id} className="flex flex-col items-center text-center min-w-0">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="relative">
@@ -2872,12 +2871,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               }
             </div>
           </main>
-        </div>
-
-        {/* Right Chat Sidebar */}
-        <aside className="w-80 lg:w-96 bg-card border-l border-border flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h2 className="text-xl font-semibold mb-3 flex items-center justify-between font-headline">
+        </div>        {/* Right Chat Sidebar */}
+        <aside className="w-full lg:w-80 xl:w-96 bg-card border-t lg:border-l lg:border-t-0 border-border flex flex-col h-64 lg:h-auto lg:flex-shrink-0">
+          <div className="p-3 sm:p-4 border-b border-border">
+            <h2 className="text-lg sm:text-xl font-semibold mb-3 flex items-center justify-between font-headline">
               Room Menu
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -2885,8 +2882,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     variant="ghost" 
                     size="icon"
                     onClick={() => handleRoomSettingsOpen()}
+                    className="h-8 w-8 sm:h-10 sm:w-10"
                   >
-                    <Settings className="h-5 w-5" />
+                    <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent><p>Room Settings</p></TooltipContent>
@@ -2925,24 +2923,23 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </div>
               </DialogContent>
             </Dialog>
-            
-            <div className="flex items-center justify-around gap-2">
+              <div className="flex items-center justify-around gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
                     onClick={handleMicToggle}
                     className={cn(
-                      "flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground shadow-md active:shadow-inner active:translate-y-px border-b-4 border-muted relative",
+                      "flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground shadow-md active:shadow-inner active:translate-y-px border-b-4 border-muted relative h-10 sm:h-12",
                       isSpeaking && "ring-2 ring-green-400 border-green-400"
                     )}
                     size="icon"
                     suppressHydrationWarning
                   >
-                    {isMicOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5 text-destructive" />}
+                    {isMicOn ? <Mic className="h-4 w-4 sm:h-5 sm:w-5" /> : <MicOff className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />}
                     
                     {/* Voice level indicator on mic button */}
                     {isMicOn && isSpeaking && (
-                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-black/20 rounded-full overflow-hidden">
+                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-6 sm:w-8 h-1 bg-black/20 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-green-400 transition-all duration-150"
                           style={{ width: `${voiceLevel}%` }}
@@ -2961,30 +2958,29 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 <TooltipTrigger asChild>
                   <Button 
                     onClick={handleCameraToggle}
-                    className="flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground shadow-md active:shadow-inner active:translate-y-px border-b-4 border-muted"
+                    className="flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground shadow-md active:shadow-inner active:translate-y-px border-b-4 border-muted h-10 sm:h-12"
                     size="icon"
                     suppressHydrationWarning
                   >
-                    {isCameraOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5 text-destructive" />}
+                    {isCameraOn ? <Video className="h-4 w-4 sm:h-5 sm:w-5" /> : <VideoOff className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent><p>{isCameraOn ? "Stop Camera" : "Start Camera"}</p></TooltipContent>
               </Tooltip>
             </div>
-          </div>
-          
+          </div>          
           <div className="p-2 text-sm text-muted-foreground border-b border-border">
             <Users className="h-4 w-4 inline mr-1" /> {allParticipants.length} online
           </div>
 
-          <ScrollArea className="flex-grow p-3 pr-2">
+          <ScrollArea className="flex-grow p-2 sm:p-3 pr-2 mobile-scroll">
             {messages.map((msg) => {
               const isCurrentUser = msg.user === userName;
               const isSystemMessage = msg.user === "System";
               return (
-                <div key={msg.id} className={`flex gap-2 mb-3 ${isCurrentUser ? 'justify-end' : ''}`}>
+                <div key={msg.id} className={`flex gap-2 mb-2 sm:mb-3 ${isCurrentUser ? 'justify-end' : ''}`}>
                   {!isCurrentUser && !isSystemMessage && (
-                    <Avatar className="h-8 w-8">
+                    <Avatar className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0">
                       <AvatarImage src={msg.avatar || `https://placehold.co/40x40.png?text=${msg.user.charAt(0)}`} alt={msg.user} data-ai-hint="user avatar" />
                       <AvatarFallback>{msg.user.charAt(0)}</AvatarFallback>
                     </Avatar>
@@ -2999,13 +2995,13 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     {!isSystemMessage && (
                       <p className="text-xs font-semibold mb-0.5">{msg.user}</p>
                     )}
-                    <p className="text-sm">{msg.text}</p>
+                    <p className="text-xs sm:text-sm break-words">{msg.text}</p>
                     <p className="text-xs text-muted-foreground/80 mt-1 text-right">
                       {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                   {isCurrentUser && (
-                    <Avatar className="h-8 w-8">
+                    <Avatar className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0">
                       <AvatarImage src={msg.avatar} alt={msg.user} data-ai-hint="user avatar host" />
                       <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
                     </Avatar>
@@ -3016,30 +3012,28 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             <div ref={messagesEndRef} />
           </ScrollArea>
           
-          <form onSubmit={handleSendMessage} className="p-3 border-t border-border flex gap-2 bg-card">
+          <form onSubmit={handleSendMessage} className="p-2 sm:p-3 border-t border-border flex gap-2 bg-card mobile-video-controls">
             <Input
               type="text"
               placeholder="Type a message..."
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              className="flex-grow bg-background focus:ring-primary"
+              className="flex-grow bg-background focus:ring-primary text-sm"
               suppressHydrationWarning
             />
             <Button 
               type="submit" 
               size="icon" 
               aria-label="Send message" 
-              className="bg-primary hover:bg-primary/80"
+              className="bg-primary hover:bg-primary/80 h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
               suppressHydrationWarning
             >
-              <Send className="h-5 w-5" />
+              <Send className="h-4 w-4" />
             </Button>
-          </form>        </aside>
-
-        {/* Select Media Modal (Dialog) */}
+          </form></aside>        {/* Select Media Modal (Dialog) */}
         <Dialog open={isSelectMediaModalOpen} onOpenChange={setIsSelectMediaModalOpen}>
           <DialogContent 
-            className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl w-[95vw] md:w-[90vw] h-auto md:h-[90vh] p-0 border-0 bg-transparent shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
+            className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl w-[95vw] md:w-[90vw] h-auto max-h-[90vh] md:h-[90vh] p-0 border-0 bg-transparent shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
             onOpenAutoFocus={(e) => e.preventDefault()}
           >
             <DialogHeader className="sr-only">
@@ -3051,70 +3045,70 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               onPlayUrl={handlePlayUrl} 
             />
           </DialogContent>
-        </Dialog>
-
-        {/* Participants Dialog */}
+        </Dialog>        {/* Participants Dialog */}
         <Dialog open={isParticipantsOpen} onOpenChange={setIsParticipantsOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md mx-4 w-[calc(100vw-2rem)]">
             <DialogHeader>
               <DialogTitle>Participants ({allParticipants.length})</DialogTitle>
             </DialogHeader>
-            <ul className="space-y-2">
-              {allParticipants.map((user) => (
-                <li key={user.id} className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="relative">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={user.avatarUrl} alt={user.name} />
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      {user.isHost && (
-                        <span className="absolute -top-1 -right-1 bg-transparent">
-                          <Crown className="h-4 w-4 text-yellow-500 drop-shadow" />
-                        </span>
-                      )}
+            <div className="max-h-[60vh] mobile-scroll">
+              <ul className="space-y-2">
+                {allParticipants.map((user) => (
+                  <li key={user.id} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="relative flex-shrink-0">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={user.avatarUrl} alt={user.name} />
+                          <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        {user.isHost && (
+                          <span className="absolute -top-1 -right-1 bg-transparent">
+                            <Crown className="h-4 w-4 text-yellow-500 drop-shadow" />
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-medium truncate">{user.name}</span>
                     </div>
-                    <span className="font-medium">{user.name}</span>
-                  </div>
-                  
-                  {/* Host controls - only show if current user is host and not controlling themselves */}
-                  {isHost && user.id !== `${userName}_host_${roomId}` && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <Settings className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem 
-                          onClick={() => handleAppointHost(user.id)}
-                          className="text-primary"
-                        >
-                          <Crown className="h-4 w-4 mr-2" />
-                          Appoint as Host
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => handleKickParticipant(user.id)}
-                          className="text-destructive"
-                        >
-                          <LogOut className="h-4 w-4 mr-2" />
-                          Kick
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </li>
-              ))}
-            </ul>
+                    
+                    {/* Host controls - only show if current user is host and not controlling themselves */}
+                    {isHost && user.id !== `${userName}_host_${roomId}` && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+                            <Settings className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem 
+                            onClick={() => handleAppointHost(user.id)}
+                            className="text-primary"
+                          >
+                            <Crown className="h-4 w-4 mr-2" />
+                            Appoint as Host
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => handleKickParticipant(user.id)}
+                            className="text-destructive"
+                          >
+                            <LogOut className="h-4 w-4 mr-2" />
+                            Kick
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </DialogContent>
         </Dialog>        {/* Name Prompt Modal */}
         <Dialog open={isNamePromptOpen} onOpenChange={setIsNamePromptOpen}>
-          <DialogContent className="max-w-xs">
+          <DialogContent className="max-w-xs mx-4 w-[calc(100vw-2rem)]">
             <DialogHeader>
-              <DialogTitle>{isHost ? 'Welcome, Room Host!' : 'Enter your name'}</DialogTitle>
+              <DialogTitle className="text-center">{isHost ? 'Welcome, Room Host!' : 'Enter your name'}</DialogTitle>
               {isHost && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground text-center">
                   As the room creator, you'll have host privileges. What should we call you?
                 </p>
               )}
@@ -3127,23 +3121,22 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 onChange={e => setNameInput(e.target.value)}
                 maxLength={20}
                 required
+                className="text-center"
               />
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full h-12">
                 {isHost ? 'Create Room' : 'Join Room'}
               </Button>
             </form>
           </DialogContent>
-        </Dialog>
-
-        {/* Theme Selection Modal */}
+        </Dialog>        {/* Theme Selection Modal */}
         <Dialog open={isThemeModalOpen} onOpenChange={setIsThemeModalOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md mx-4 w-[calc(100vw-2rem)]">
             <DialogHeader>
               <DialogTitle>Choose Background Theme</DialogTitle>
               <p className="text-sm text-muted-foreground">Select a background theme for your room</p>
-            </DialogHeader>
-            <div className="grid grid-cols-2 gap-3 mt-4">
-              {Object.entries(backgroundThemes).map(([key, theme]) => (
+            </DialogHeader>            
+            <div className="grid grid-cols-2 gap-3 mt-4 max-h-[50vh] mobile-scroll">
+              {(Object.entries(backgroundThemes) as Array<[string, { name: string; image: string; preview: string }]>).map(([key, theme]) => (
                 <button
                   key={key}
                   onClick={() => {
@@ -3151,7 +3144,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     setIsThemeModalOpen(false);
                   }}
                   className={cn(
-                    "relative aspect-video rounded-lg border-2 overflow-hidden transition-all hover:scale-105",
+                    "relative aspect-video rounded-lg border-2 overflow-hidden transition-all hover:scale-105 touch-manipulation",
                     selectedTheme === key 
                       ? "border-primary ring-2 ring-primary/20" 
                       : "border-border hover:border-primary/50"
@@ -3167,7 +3160,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     }}
                   >
                     {!theme.image && (
-                      <span className="bg-black/20 px-2 py-1 rounded">{theme.name}</span>
+                      <span className="bg-black/20 px-2 py-1 rounded text-xs">{theme.name}</span>
                     )}
                   </div>
                   <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 text-center">
@@ -3182,12 +3175,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               ))}
             </div>
           </DialogContent>
-        </Dialog>
-
-        {/* Room Settings Modal */}
+        </Dialog>        {/* Room Settings Modal */}
         <Dialog open={isRoomSettingsOpen} onOpenChange={handleRoomSettingsClose}>
-          <DialogContent className="max-w-md p-0 gap-0 bg-card/95 backdrop-blur-md border-border">
-            <DialogHeader className="p-6 pb-4">
+          <DialogContent className="max-w-md mx-4 w-[calc(100vw-2rem)] p-0 gap-0 bg-card/95 backdrop-blur-md border-border max-h-[90vh] mobile-scroll">
+            <DialogHeader className="p-4 sm:p-6 pb-4">
               <div className="flex items-center gap-3">
                 {roomSettingsView !== 'main' && (
                   <Button
@@ -3199,7 +3190,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     <ChevronRight className="h-4 w-4 rotate-180" />
                   </Button>
                 )}
-                <DialogTitle className="text-foreground text-xl font-semibold">
+                <DialogTitle className="text-foreground text-lg sm:text-xl font-semibold">
                   {roomSettingsView === 'main' && 'Room Settings'}
                   {roomSettingsView === 'appearance' && 'Choose Background'}
                   {roomSettingsView === 'avatar' && 'Choose Avatar'}
@@ -3214,7 +3205,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               )}
             </DialogHeader>
             
-            <div className="px-6 pb-6">
+            <div className="px-4 sm:px-6 pb-4 sm:pb-6 flex-1 overflow-y-auto mobile-scroll">
               {roomSettingsView === 'main' && (
                 <div className="space-y-3">
                   {/* Avatar Section */}
@@ -3378,9 +3369,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </div>
               )}
 
-              {roomSettingsView === 'appearance' && (
-                <div className="grid grid-cols-2 gap-3">
-                  {Object.entries(backgroundThemes).map(([key, theme]) => (
+              {roomSettingsView === 'appearance' && (                <div className="grid grid-cols-2 gap-3">
+                  {(Object.entries(backgroundThemes) as Array<[string, { name: string; image: string; preview: string }]>).map(([key, theme]) => (
                     <button
                       key={key}
                       onClick={() => {
